@@ -40,7 +40,7 @@
 
 
 //If you want debug information for this model, uncomment next line
-//#define DEBUG_MODEL
+#define DEBUG_MODEL
 #include "ac_debug_model.H"
 
 
@@ -51,6 +51,39 @@
 // 'using namespace' statement to allow access to all
 // mips1-specific datatypes
 using namespace mips1_parms;
+
+// Hazard counters
+int hazard_counter = 0;
+int loaded_register = -1;
+bool last_was_load = false;
+
+/**
+ * To be called at the end of a load instruction.
+ *
+ * @param rt register being loaded by the load instruction
+ */
+void load_teardown(int rt)
+{
+  last_was_load = true;
+  loaded_register = rt;
+}
+
+/**
+ * Check for a load-use data hazard.
+ * There's a load-use data hazard when a register that is being loaded by a load
+ * instruction has not yet become available when it is needed by another
+ * instruction.
+ *
+ * @param rs register being used as rs by the current instruction
+ * @param rt register being used as rt by the current instruction
+ */
+void check_load_use_hazard(int rs, int rt)
+{
+  if (last_was_load && (rs == loaded_register || rt == loaded_register)) {
+    hazard_counter = hazard_counter + 1;
+    dbg_printf("Load-Use Data Hazard!\n");
+  }
+}
 
 //!Generic instruction behavior method.
 void ac_behavior( instruction )
@@ -64,9 +97,22 @@ void ac_behavior( instruction )
 };
  
 //! Instruction Format behavior methods.
-void ac_behavior( Type_R ){}
-void ac_behavior( Type_I ){}
-void ac_behavior( Type_J ){}
+void ac_behavior( Type_R )
+{
+  check_load_use_hazard(rs, rt);
+  last_was_load = false;
+}
+
+void ac_behavior( Type_I )
+{
+  check_load_use_hazard(rs, rt);
+  last_was_load = false;
+}
+
+void ac_behavior( Type_J )
+{
+  last_was_load = false;
+}
  
 //!Behavior called before starting simulation
 void ac_behavior(begin)
@@ -80,14 +126,18 @@ void ac_behavior(begin)
     RB[regNum] = 0;
   hi = 0;
   lo = 0;
+
+  hazard_counter = 0;
+  loaded_register = -1;
+  last_was_load = false;
 }
 
 //!Behavior called after finishing simulation
 void ac_behavior(end)
 {
   dbg_printf("@@@ end behavior @@@\n");
+  dbg_printf("@@@ Number of Load-Use Data Hazards: %d @@@\n", hazard_counter);
 }
-
 
 //!Instruction lb behavior method.
 void ac_behavior( lb )
@@ -97,6 +147,7 @@ void ac_behavior( lb )
   byte = DM.read_byte(RB[rs]+ imm);
   RB[rt] = (ac_Sword)byte ;
   dbg_printf("Result = %#x\n", RB[rt]);
+  load_teardown(rt);
 };
 
 //!Instruction lbu behavior method.
@@ -107,6 +158,7 @@ void ac_behavior( lbu )
   byte = DM.read_byte(RB[rs]+ imm);
   RB[rt] = byte ;
   dbg_printf("Result = %#x\n", RB[rt]);
+  load_teardown(rt);
 };
 
 //!Instruction lh behavior method.
@@ -117,6 +169,7 @@ void ac_behavior( lh )
   half = DM.read_half(RB[rs]+ imm);
   RB[rt] = (ac_Sword)half ;
   dbg_printf("Result = %#x\n", RB[rt]);
+  load_teardown(rt);
 };
 
 //!Instruction lhu behavior method.
@@ -126,6 +179,7 @@ void ac_behavior( lhu )
   half = DM.read_half(RB[rs]+ imm);
   RB[rt] = half ;
   dbg_printf("Result = %#x\n", RB[rt]);
+  load_teardown(rt);
 };
 
 //!Instruction lw behavior method.
@@ -134,6 +188,7 @@ void ac_behavior( lw )
   dbg_printf("lw r%d, %d(r%d)\n", rt, imm & 0xFFFF, rs);
   RB[rt] = DM.read(RB[rs]+ imm);
   dbg_printf("Result = %#x\n", RB[rt]);
+  load_teardown(rt);
 };
 
 //!Instruction lwl behavior method.
@@ -150,6 +205,7 @@ void ac_behavior( lwl )
   data |= RB[rt] & ((1<<offset)-1);
   RB[rt] = data;
   dbg_printf("Result = %#x\n", RB[rt]);
+  load_teardown(rt);
 };
 
 //!Instruction lwr behavior method.
@@ -166,6 +222,7 @@ void ac_behavior( lwr )
   data |= RB[rt] & (0xFFFFFFFF << (32-offset));
   RB[rt] = data;
   dbg_printf("Result = %#x\n", RB[rt]);
+  load_teardown(rt);
 };
 
 //!Instruction sb behavior method.
@@ -539,7 +596,7 @@ void ac_behavior( mthi )
 {
   dbg_printf("mthi r%d\n", rs);
   hi = RB[rs];
-  dbg_printf("Result = %#x\n", hi);
+  dbg_printf("Result = %#x\n", (unsigned int)hi);
 };
 
 //!Instruction mflo behavior method.
@@ -555,7 +612,7 @@ void ac_behavior( mtlo )
 {
   dbg_printf("mtlo r%d\n", rs);
   lo = RB[rs];
-  dbg_printf("Result = %#x\n", lo);
+  dbg_printf("Result = %#x\n", (unsigned int)lo);
 };
 
 //!Instruction j behavior method.
