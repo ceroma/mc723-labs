@@ -13,23 +13,23 @@
  *
  * @version   1.0
  * @date      Mon, 19 Jun 2006 15:50:52 -0300
- * 
+ *
  * @brief     The ArchC i8051 functional model.
- * 
+ *
  * @attention Copyright (C) 2002-2006 --- The ArchC Team
- * 
- * This program is free software; you can redistribute it and/or modify 
- * it under the terms of the GNU General Public License as published by 
- * the Free Software Foundation; either version 2 of the License, or 
- * (at your option) any later version. 
- * 
- * This program is distributed in the hope that it will be useful, 
- * but WITHOUT ANY WARRANTY; without even the implied warranty of 
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the 
- * GNU General Public License for more details. 
- * 
- * You should have received a copy of the GNU General Public License 
- * along with this program; if not, write to the Free Software 
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
@@ -87,15 +87,15 @@ void check_load_use_hazard(int rs, int rt)
 
 //!Generic instruction behavior method.
 void ac_behavior( instruction )
-{ 
+{
   dbg_printf("----- PC=%#x ----- %lld\n", (int) ac_pc, ac_instr_counter);
   //  dbg_printf("----- PC=%#x NPC=%#x ----- %lld\n", (int) ac_pc, (int)npc, ac_instr_counter);
 #ifndef NO_NEED_PC_UPDATE
   ac_pc = npc;
   npc = ac_pc + 4;
-#endif 
+#endif
 };
- 
+
 //! Instruction Format behavior methods.
 void ac_behavior( Type_R )
 {
@@ -113,7 +113,7 @@ void ac_behavior( Type_J )
 {
   last_was_load = false;
 }
- 
+
 //!Behavior called before starting simulation
 void ac_behavior(begin)
 {
@@ -467,13 +467,13 @@ void ac_behavior( instr_nor )
 
 //!Instruction nop behavior method.
 void ac_behavior( nop )
-{  
+{
   dbg_printf("nop\n");
 };
 
 //!Instruction sll behavior method.
 void ac_behavior( sll )
-{  
+{
   dbg_printf("sll r%d, r%d, %d\n", rd, rs, shamt);
   RB[rd] = RB[rt] << shamt;
   dbg_printf("Result = %#x\n", RB[rd]);
@@ -622,7 +622,7 @@ void ac_behavior( j )
   addr = addr << 2;
 #ifndef NO_NEED_PC_UPDATE
   npc =  (ac_pc & 0xF0000000) | addr;
-#endif 
+#endif
   dbg_printf("Target = %#x\n", (ac_pc & 0xF0000000) | addr );
 };
 
@@ -638,7 +638,7 @@ void ac_behavior( jal )
   addr = addr << 2;
 #ifndef NO_NEED_PC_UPDATE
   npc = (ac_pc & 0xF0000000) | addr;
-#endif 
+#endif
 	
   dbg_printf("Target = %#x\n", (ac_pc & 0xF0000000) | addr );
   dbg_printf("Return = %#x\n", ac_pc+4);
@@ -652,7 +652,7 @@ void ac_behavior( jr )
   // It must also flush the instructions that were loaded into the pipeline
 #ifndef NO_NEED_PC_UPDATE
   npc = RB[rs], 1;
-#endif 
+#endif
   dbg_printf("Target = %#x\n", RB[rs]);
 };
 
@@ -665,7 +665,7 @@ void ac_behavior( jalr )
 
 #ifndef NO_NEED_PC_UPDATE
   npc = RB[rs], 1;
-#endif 
+#endif
   dbg_printf("Target = %#x\n", RB[rs]);
 
   if( rd == 0 )  //If rd is not defined use default
@@ -681,7 +681,7 @@ void ac_behavior( beq )
   if( RB[rs] == RB[rt] ){
 #ifndef NO_NEED_PC_UPDATE
     npc = ac_pc + (imm<<2);
-#endif 
+#endif
     dbg_printf("Taken to %#x\n", ac_pc + (imm<<2));
   }	
 };
@@ -693,7 +693,7 @@ void ac_behavior( bne )
   if( RB[rs] != RB[rt] ){
 #ifndef NO_NEED_PC_UPDATE
     npc = ac_pc + (imm<<2);
-#endif 
+#endif
     dbg_printf("Taken to %#x\n", ac_pc + (imm<<2));
   }	
 };
@@ -705,7 +705,7 @@ void ac_behavior( blez )
   if( (RB[rs] == 0 ) || (RB[rs]&0x80000000 ) ){
 #ifndef NO_NEED_PC_UPDATE
     npc = ac_pc + (imm<<2), 1;
-#endif 
+#endif
     dbg_printf("Taken to %#x\n", ac_pc + (imm<<2));
   }	
 };
@@ -717,7 +717,7 @@ void ac_behavior( bgtz )
   if( !(RB[rs] & 0x80000000) && (RB[rs]!=0) ){
 #ifndef NO_NEED_PC_UPDATE
     npc = ac_pc + (imm<<2);
-#endif 
+#endif
     dbg_printf("Taken to %#x\n", ac_pc + (imm<<2));
   }	
 };
@@ -729,7 +729,7 @@ void ac_behavior( bltz )
   if( RB[rs] & 0x80000000 ){
 #ifndef NO_NEED_PC_UPDATE
     npc = ac_pc + (imm<<2);
-#endif 
+#endif
     dbg_printf("Taken to %#x\n", ac_pc + (imm<<2));
   }	
 };
@@ -741,7 +741,7 @@ void ac_behavior( bgez )
   if( !(RB[rs] & 0x80000000) ){
 #ifndef NO_NEED_PC_UPDATE
     npc = ac_pc + (imm<<2);
-#endif 
+#endif
     dbg_printf("Taken to %#x\n", ac_pc + (imm<<2));
   }	
 };
@@ -754,7 +754,7 @@ void ac_behavior( bltzal )
   if( RB[rs] & 0x80000000 ){
 #ifndef NO_NEED_PC_UPDATE
     npc = ac_pc + (imm<<2);
-#endif 
+#endif
     dbg_printf("Taken to %#x\n", ac_pc + (imm<<2));
   }	
   dbg_printf("Return = %#x\n", ac_pc+4);
@@ -768,7 +768,7 @@ void ac_behavior( bgezal )
   if( !(RB[rs] & 0x80000000) ){
 #ifndef NO_NEED_PC_UPDATE
     npc = ac_pc + (imm<<2);
-#endif 
+#endif
     dbg_printf("Taken to %#x\n", ac_pc + (imm<<2));
   }	
   dbg_printf("Return = %#x\n", ac_pc+4);
@@ -784,6 +784,6 @@ void ac_behavior( sys_call )
 //!Instruction instr_break behavior method.
 void ac_behavior( instr_break )
 {
-  fprintf(stderr, "instr_break behavior not implemented.\n"); 
+  fprintf(stderr, "instr_break behavior not implemented.\n");
   exit(EXIT_FAILURE);
 }
