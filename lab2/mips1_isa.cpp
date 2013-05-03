@@ -95,6 +95,84 @@ void check_load_use_hazard(int rs) {
   check_load_use_hazard(rs, -2);
 }
 
+/**
+ * A simple cache block without the actual data.
+ */
+class CacheBlock
+{
+    bool valid;
+    unsigned int tag;
+
+  public:
+
+    CacheBlock() {
+      tag = 0;
+      valid = false;
+    }
+
+    /**
+     * Saves the information about the address that was loaded into this block.
+     */
+    void set(unsigned int tag) {
+      tag = tag;
+      valid = true;
+    }
+
+    unsigned int getTag() {
+      return tag;
+    }
+
+    bool isValid() {
+      return valid;
+    }
+};
+
+/**
+ * A simple read-only (for now) direct-mapped cache with variable number
+ * of word-sized blocks.
+ */
+class Cache
+{
+    static const int BYTE_OFFSET = 2;
+
+    unsigned int hits, misses;
+    unsigned int numIndexBits, numTagBits;
+
+    unsigned int numBlocks;
+    std::vector<CacheBlock> blocks;
+
+  public:
+
+    Cache(unsigned int numIndexBits)
+      : hits(0)
+      , misses(0)
+      , numIndexBits(numIndexBits)
+      , numTagBits(AC_WORDSIZE - numIndexBits - BYTE_OFFSET)
+      , numBlocks(1 << numIndexBits)
+      , blocks(numBlocks)
+    {}
+
+    /**
+     * Simulates a cache read and checks whether it would've been a hit or not.
+     *
+     * @param address the memory address being read
+     */
+    void read(ac_word address) {
+      unsigned int tag, index;
+
+      tag = address >> (AC_WORDSIZE - numTagBits);
+      index = (address >> BYTE_OFFSET) & ~(0xFFFFFFFF << numIndexBits);
+
+      CacheBlock block = blocks[index];
+      if (block.isValid() && block.getTag() == tag) {
+        hits++;
+      } else {
+        misses++;
+        block.set(tag);
+      }
+    }
+};
+
 //!Generic instruction behavior method.
 void ac_behavior( instruction )
 {
