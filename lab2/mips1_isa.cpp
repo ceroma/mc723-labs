@@ -85,6 +85,16 @@ void check_load_use_hazard(int rs, int rt)
   }
 }
 
+/**
+ * Same as above, but to be used by I-type instructions that only use one of
+ * the registers as source.
+ *
+ * @param rs register being used as source by the current instruction
+ */
+void check_load_use_hazard(int rs) {
+  check_load_use_hazard(rs, -2);
+}
+
 //!Generic instruction behavior method.
 void ac_behavior( instruction )
 {
@@ -103,11 +113,7 @@ void ac_behavior( Type_R )
   last_was_load = false;
 }
 
-void ac_behavior( Type_I )
-{
-  check_load_use_hazard(rs, rt);
-  last_was_load = false;
-}
+void ac_behavior( Type_I ){}
 
 void ac_behavior( Type_J )
 {
@@ -142,58 +148,75 @@ void ac_behavior(end)
 //!Instruction lb behavior method.
 void ac_behavior( lb )
 {
+  check_load_use_hazard(rs);
+
   char byte;
   dbg_printf("lb r%d, %d(r%d)\n", rt, imm & 0xFFFF, rs);
   byte = DM.read_byte(RB[rs]+ imm);
   RB[rt] = (ac_Sword)byte ;
   dbg_printf("Result = %#x\n", RB[rt]);
+
   load_teardown(rt);
 };
 
 //!Instruction lbu behavior method.
 void ac_behavior( lbu )
 {
+  check_load_use_hazard(rs);
+
   unsigned char byte;
   dbg_printf("lbu r%d, %d(r%d)\n", rt, imm & 0xFFFF, rs);
   byte = DM.read_byte(RB[rs]+ imm);
   RB[rt] = byte ;
   dbg_printf("Result = %#x\n", RB[rt]);
+
   load_teardown(rt);
 };
 
 //!Instruction lh behavior method.
 void ac_behavior( lh )
 {
+  check_load_use_hazard(rs);
+
   short int half;
   dbg_printf("lh r%d, %d(r%d)\n", rt, imm & 0xFFFF, rs);
   half = DM.read_half(RB[rs]+ imm);
   RB[rt] = (ac_Sword)half ;
   dbg_printf("Result = %#x\n", RB[rt]);
+
   load_teardown(rt);
 };
 
 //!Instruction lhu behavior method.
 void ac_behavior( lhu )
 {
+  check_load_use_hazard(rs);
+
   unsigned short int  half;
   half = DM.read_half(RB[rs]+ imm);
   RB[rt] = half ;
   dbg_printf("Result = %#x\n", RB[rt]);
+
   load_teardown(rt);
 };
 
 //!Instruction lw behavior method.
 void ac_behavior( lw )
 {
+  check_load_use_hazard(rs);
+
   dbg_printf("lw r%d, %d(r%d)\n", rt, imm & 0xFFFF, rs);
   RB[rt] = DM.read(RB[rs]+ imm);
   dbg_printf("Result = %#x\n", RB[rt]);
+
   load_teardown(rt);
 };
 
 //!Instruction lwl behavior method.
 void ac_behavior( lwl )
 {
+  check_load_use_hazard(rs);
+
   dbg_printf("lwl r%d, %d(r%d)\n", rt, imm & 0xFFFF, rs);
   unsigned int addr, offset;
   ac_Uword data;
@@ -205,12 +228,15 @@ void ac_behavior( lwl )
   data |= RB[rt] & ((1<<offset)-1);
   RB[rt] = data;
   dbg_printf("Result = %#x\n", RB[rt]);
+
   load_teardown(rt);
 };
 
 //!Instruction lwr behavior method.
 void ac_behavior( lwr )
 {
+  check_load_use_hazard(rs);
+
   dbg_printf("lwr r%d, %d(r%d)\n", rt, imm & 0xFFFF, rs);
   unsigned int addr, offset;
   ac_Uword data;
@@ -222,12 +248,16 @@ void ac_behavior( lwr )
   data |= RB[rt] & (0xFFFFFFFF << (32-offset));
   RB[rt] = data;
   dbg_printf("Result = %#x\n", RB[rt]);
+
   load_teardown(rt);
 };
 
 //!Instruction sb behavior method.
 void ac_behavior( sb )
 {
+  check_load_use_hazard(rs, rt);
+  last_was_load = false;
+
   unsigned char byte;
   dbg_printf("sb r%d, %d(r%d)\n", rt, imm & 0xFFFF, rs);
   byte = RB[rt] & 0xFF;
@@ -238,6 +268,9 @@ void ac_behavior( sb )
 //!Instruction sh behavior method.
 void ac_behavior( sh )
 {
+  check_load_use_hazard(rs, rt);
+  last_was_load = false;
+
   unsigned short int half;
   dbg_printf("sh r%d, %d(r%d)\n", rt, imm & 0xFFFF, rs);
   half = RB[rt] & 0xFFFF;
@@ -248,6 +281,9 @@ void ac_behavior( sh )
 //!Instruction sw behavior method.
 void ac_behavior( sw )
 {
+  check_load_use_hazard(rs, rt);
+  last_was_load = false;
+
   dbg_printf("sw r%d, %d(r%d)\n", rt, imm & 0xFFFF, rs);
   DM.write(RB[rs] + imm, RB[rt]);
   dbg_printf("Result = %#x\n", RB[rt]);
@@ -256,6 +292,9 @@ void ac_behavior( sw )
 //!Instruction swl behavior method.
 void ac_behavior( swl )
 {
+  check_load_use_hazard(rs, rt);
+  last_was_load = false;
+
   dbg_printf("swl r%d, %d(r%d)\n", rt, imm & 0xFFFF, rs);
   unsigned int addr, offset;
   ac_Uword data;
@@ -272,6 +311,9 @@ void ac_behavior( swl )
 //!Instruction swr behavior method.
 void ac_behavior( swr )
 {
+  check_load_use_hazard(rs, rt);
+  last_was_load = false;
+
   dbg_printf("swr r%d, %d(r%d)\n", rt, imm & 0xFFFF, rs);
   unsigned int addr, offset;
   ac_Uword data;
@@ -288,6 +330,9 @@ void ac_behavior( swr )
 //!Instruction addi behavior method.
 void ac_behavior( addi )
 {
+  check_load_use_hazard(rs);
+  last_was_load = false;
+
   dbg_printf("addi r%d, r%d, %d\n", rt, rs, imm & 0xFFFF);
   RB[rt] = RB[rs] + imm;
   dbg_printf("Result = %#x\n", RB[rt]);
@@ -301,6 +346,9 @@ void ac_behavior( addi )
 //!Instruction addiu behavior method.
 void ac_behavior( addiu )
 {
+  check_load_use_hazard(rs);
+  last_was_load = false;
+
   dbg_printf("addiu r%d, r%d, %d\n", rt, rs, imm & 0xFFFF);
   RB[rt] = RB[rs] + imm;
   dbg_printf("Result = %#x\n", RB[rt]);
@@ -309,6 +357,9 @@ void ac_behavior( addiu )
 //!Instruction slti behavior method.
 void ac_behavior( slti )
 {
+  check_load_use_hazard(rs);
+  last_was_load = false;
+
   dbg_printf("slti r%d, r%d, %d\n", rt, rs, imm & 0xFFFF);
   // Set the RD if RS< IMM
   if( (ac_Sword) RB[rs] < (ac_Sword) imm )
@@ -322,6 +373,9 @@ void ac_behavior( slti )
 //!Instruction sltiu behavior method.
 void ac_behavior( sltiu )
 {
+  check_load_use_hazard(rs);
+  last_was_load = false;
+
   dbg_printf("sltiu r%d, r%d, %d\n", rt, rs, imm & 0xFFFF);
   // Set the RD if RS< IMM
   if( (ac_Uword) RB[rs] < (ac_Uword) imm )
@@ -335,6 +389,9 @@ void ac_behavior( sltiu )
 //!Instruction andi behavior method.
 void ac_behavior( andi )
 {	
+  check_load_use_hazard(rs);
+  last_was_load = false;
+
   dbg_printf("andi r%d, r%d, %d\n", rt, rs, imm & 0xFFFF);
   RB[rt] = RB[rs] & (imm & 0xFFFF) ;
   dbg_printf("Result = %#x\n", RB[rt]);
@@ -343,6 +400,9 @@ void ac_behavior( andi )
 //!Instruction ori behavior method.
 void ac_behavior( ori )
 {	
+  check_load_use_hazard(rs);
+  last_was_load = false;
+
   dbg_printf("ori r%d, r%d, %d\n", rt, rs, imm & 0xFFFF);
   RB[rt] = RB[rs] | (imm & 0xFFFF) ;
   dbg_printf("Result = %#x\n", RB[rt]);
@@ -351,6 +411,9 @@ void ac_behavior( ori )
 //!Instruction xori behavior method.
 void ac_behavior( xori )
 {	
+  check_load_use_hazard(rs);
+  last_was_load = false;
+
   dbg_printf("xori r%d, r%d, %d\n", rt, rs, imm & 0xFFFF);
   RB[rt] = RB[rs] ^ (imm & 0xFFFF) ;
   dbg_printf("Result = %#x\n", RB[rt]);
@@ -359,6 +422,9 @@ void ac_behavior( xori )
 //!Instruction lui behavior method.
 void ac_behavior( lui )
 {	
+  check_load_use_hazard(rs);
+  last_was_load = false;
+
   dbg_printf("lui r%d, r%d, %d\n", rt, rs, imm & 0xFFFF);
   // Load a constant in the upper 16 bits of a register
   // To achieve the desired behaviour, the constant was shifted 16 bits left
@@ -677,6 +743,9 @@ void ac_behavior( jalr )
 //!Instruction beq behavior method.
 void ac_behavior( beq )
 {
+  check_load_use_hazard(rs, rt);
+  last_was_load = false;
+
   dbg_printf("beq r%d, r%d, %d\n", rt, rs, imm & 0xFFFF);
   if( RB[rs] == RB[rt] ){
 #ifndef NO_NEED_PC_UPDATE
@@ -689,6 +758,9 @@ void ac_behavior( beq )
 //!Instruction bne behavior method.
 void ac_behavior( bne )
 {	
+  check_load_use_hazard(rs, rt);
+  last_was_load = false;
+
   dbg_printf("bne r%d, r%d, %d\n", rt, rs, imm & 0xFFFF);
   if( RB[rs] != RB[rt] ){
 #ifndef NO_NEED_PC_UPDATE
@@ -701,6 +773,9 @@ void ac_behavior( bne )
 //!Instruction blez behavior method.
 void ac_behavior( blez )
 {
+  check_load_use_hazard(rs);
+  last_was_load = false;
+
   dbg_printf("blez r%d, %d\n", rs, imm & 0xFFFF);
   if( (RB[rs] == 0 ) || (RB[rs]&0x80000000 ) ){
 #ifndef NO_NEED_PC_UPDATE
@@ -713,6 +788,9 @@ void ac_behavior( blez )
 //!Instruction bgtz behavior method.
 void ac_behavior( bgtz )
 {
+  check_load_use_hazard(rs);
+  last_was_load = false;
+
   dbg_printf("bgtz r%d, %d\n", rs, imm & 0xFFFF);
   if( !(RB[rs] & 0x80000000) && (RB[rs]!=0) ){
 #ifndef NO_NEED_PC_UPDATE
@@ -725,6 +803,9 @@ void ac_behavior( bgtz )
 //!Instruction bltz behavior method.
 void ac_behavior( bltz )
 {
+  check_load_use_hazard(rs);
+  last_was_load = false;
+
   dbg_printf("bltz r%d, %d\n", rs, imm & 0xFFFF);
   if( RB[rs] & 0x80000000 ){
 #ifndef NO_NEED_PC_UPDATE
@@ -737,6 +818,9 @@ void ac_behavior( bltz )
 //!Instruction bgez behavior method.
 void ac_behavior( bgez )
 {
+  check_load_use_hazard(rs);
+  last_was_load = false;
+
   dbg_printf("bgez r%d, %d\n", rs, imm & 0xFFFF);
   if( !(RB[rs] & 0x80000000) ){
 #ifndef NO_NEED_PC_UPDATE
@@ -749,6 +833,9 @@ void ac_behavior( bgez )
 //!Instruction bltzal behavior method.
 void ac_behavior( bltzal )
 {
+  check_load_use_hazard(rs);
+  last_was_load = false;
+
   dbg_printf("bltzal r%d, %d\n", rs, imm & 0xFFFF);
   RB[Ra] = ac_pc+4; //ac_pc is pc+4, we need pc+8
   if( RB[rs] & 0x80000000 ){
@@ -763,6 +850,9 @@ void ac_behavior( bltzal )
 //!Instruction bgezal behavior method.
 void ac_behavior( bgezal )
 {
+  check_load_use_hazard(rs);
+  last_was_load = false;
+
   dbg_printf("bgezal r%d, %d\n", rs, imm & 0xFFFF);
   RB[Ra] = ac_pc+4; //ac_pc is pc+4, we need pc+8
   if( !(RB[rs] & 0x80000000) ){
