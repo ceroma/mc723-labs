@@ -114,8 +114,8 @@ class CacheBlock
      * Saves the information about the address that was loaded into this block.
      */
     void set(unsigned int tag) {
-      tag = tag;
       valid = true;
+      this->tag = tag;
     }
 
     unsigned int getTag() {
@@ -163,7 +163,7 @@ class Cache
       tag = address >> (AC_WORDSIZE - numTagBits);
       index = (address >> BYTE_OFFSET) & ~(0xFFFFFFFF << numIndexBits);
 
-      CacheBlock block = blocks[index];
+      CacheBlock& block = blocks[index];
       if (block.isValid() && block.getTag() == tag) {
         hits++;
       } else {
