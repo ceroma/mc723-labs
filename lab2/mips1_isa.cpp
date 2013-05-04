@@ -143,11 +143,11 @@ class Cache
 
   public:
 
-    Cache(unsigned int numIndexBits)
+    Cache(unsigned int numIndexBits, unsigned int numBlockIndexBits)
       : hits(0)
       , misses(0)
       , numIndexBits(numIndexBits)
-      , numTagBits(AC_WORDSIZE - numIndexBits - BYTE_OFFSET)
+      , numTagBits(AC_WORDSIZE - numIndexBits - numBlockIndexBits - BYTE_OFFSET)
       , numBlocks(1 << numIndexBits)
       , blocks(numBlocks)
     {}
@@ -160,8 +160,9 @@ class Cache
     void read(ac_word address) {
       unsigned int tag, index;
 
-      tag = address >> (AC_WORDSIZE - numTagBits);
-      index = (address >> BYTE_OFFSET) & ~(0xFFFFFFFF << numIndexBits);
+      address >>= AC_WORDSIZE - numTagBits - numIndexBits;
+      tag = address >> numIndexBits;
+      index = address & ~(0xFFFFFFFF << numIndexBits);
 
       CacheBlock& block = blocks[index];
       if (block.isValid() && block.getTag() == tag) {
