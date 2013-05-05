@@ -135,17 +135,47 @@ class Cache
 {
     static const int BYTE_OFFSET = 2;
 
-    unsigned int hits, misses;
+    unsigned int readHits, readMisses;
+    unsigned int writeHits, writeMisses;
     unsigned int numIndexBits, numTagBits;
 
     unsigned int numBlocks;
     std::vector<CacheBlock> blocks;
 
+    /**
+     * Simulates a cache access (read or write) and checks whether it would've
+     * been a hit or not.
+     *
+     * @param address     the memory address being accessed
+     * @param hitCounter  pointer to the hit counter
+     * @param missCounter pointer to the miss counter
+     */
+    void access(
+        ac_word address,
+        unsigned int& hitCounter,
+        unsigned int& missCounter) {
+      unsigned int tag, index;
+
+      address >>= AC_WORDSIZE - numTagBits - numIndexBits;
+      tag = address >> numIndexBits;
+      index = address & ~(0xFFFFFFFF << numIndexBits);
+
+      CacheBlock& block = blocks[index];
+      if (block.isValid() && block.getTag() == tag) {
+        ++hitCounter;
+      } else {
+        ++missCounter;
+        block.set(tag);
+      }
+    }
+
   public:
 
     Cache(unsigned int numIndexBits, unsigned int numBlockIndexBits)
-      : hits(0)
-      , misses(0)
+      : readHits(0)
+      , readMisses(0)
+      , writeHits(0)
+      , writeMisses(0)
       , numIndexBits(numIndexBits)
       , numTagBits(AC_WORDSIZE - numIndexBits - numBlockIndexBits - BYTE_OFFSET)
       , numBlocks(1 << numIndexBits)
@@ -158,19 +188,16 @@ class Cache
      * @param address the memory address being read
      */
     void read(ac_word address) {
-      unsigned int tag, index;
+      access(address, readHits, readMisses);
+    }
 
-      address >>= AC_WORDSIZE - numTagBits - numIndexBits;
-      tag = address >> numIndexBits;
-      index = address & ~(0xFFFFFFFF << numIndexBits);
-
-      CacheBlock& block = blocks[index];
-      if (block.isValid() && block.getTag() == tag) {
-        hits++;
-      } else {
-        misses++;
-        block.set(tag);
-      }
+    /**
+     * Simulates a cache write and checks whether it would've been a hit or not.
+     *
+     * @param address the memory address being written
+     */
+    void write(ac_word address) {
+      access(address, writeHits, writeMisses);
     }
 };
 
