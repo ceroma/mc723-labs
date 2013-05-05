@@ -199,6 +199,16 @@ class Cache
     void write(ac_word address) {
       access(address, writeHits, writeMisses);
     }
+
+    /**
+     * Returns the current miss-rate of this cache.
+     */
+    double getMissRate() {
+      double hits, misses;
+      hits = (double)(readHits + writeHits);
+      misses = (double)(readMisses + writeMisses);
+      return misses / (hits + misses);
+    }
 };
 
 //!Generic instruction behavior method.
