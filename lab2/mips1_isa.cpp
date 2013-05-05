@@ -211,8 +211,8 @@ class Cache
     }
 };
 
-// 64KB cache: 1024 (2^10) lines * 16 (2^4) words/block
-Cache data_cache(10, 4);
+// 256KB cache: 1024 (2^10) lines * 64 (2^6) words/block
+Cache data_cache(10, 6);
 // 64KB cache: 2 (2^1) lines * 8192 (2^13) words/block
 Cache instructions_cache(1, 13);
 
