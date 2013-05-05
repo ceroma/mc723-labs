@@ -212,7 +212,9 @@ class Cache
 };
 
 // 64KB cache: 1024 (2^10) lines * 16 (2^4) words/block
-Cache cache(10, 4);
+Cache data_cache(10, 4);
+// 64KB cache: 2 (2^1) lines * 8192 (2^13) words/block
+Cache instructions_cache(1, 13);
 
 //!Generic instruction behavior method.
 void ac_behavior( instruction )
@@ -220,6 +222,7 @@ void ac_behavior( instruction )
   dbg_printf("----- PC=%#x ----- %lld\n", (int) ac_pc, ac_instr_counter);
   //  dbg_printf("----- PC=%#x NPC=%#x ----- %lld\n", (int) ac_pc, (int)npc, ac_instr_counter);
 #ifndef NO_NEED_PC_UPDATE
+  instructions_cache.read(npc);
   ac_pc = npc;
   npc = ac_pc + 4;
 #endif
@@ -260,8 +263,12 @@ void ac_behavior(begin)
 //!Behavior called after finishing simulation
 void ac_behavior(end)
 {
+  double miss_rate;
   dbg_printf("@@@ end behavior @@@\n");
-  dbg_printf("@@@ Cache Miss-Rate: %.2lf% @@@\n", 100 * cache.getMissRate());
+  miss_rate = data_cache.getMissRate();
+  dbg_printf("@@@ Data Cache Miss-Rate: %.2lf% @@@\n", 100 * miss_rate);
+  miss_rate = instructions_cache.getMissRate();
+  dbg_printf("@@@ Instructions Cache Miss-Rate: %.2lf% @@@\n", 100 * miss_rate);
   dbg_printf("@@@ Number of Load-Use Data Hazards: %d @@@\n", hazard_counter);
 }
 
@@ -273,7 +280,7 @@ void ac_behavior( lb )
   char byte;
   dbg_printf("lb r%d, %d(r%d)\n", rt, imm & 0xFFFF, rs);
   ac_word addr = RB[rs] + imm;
-  cache.read(addr);
+  data_cache.read(addr);
   byte = DM.read_byte(RB[rs]+ imm);
   RB[rt] = (ac_Sword)byte ;
   dbg_printf("Result = %#x\n", RB[rt]);
@@ -289,7 +296,7 @@ void ac_behavior( lbu )
   unsigned char byte;
   dbg_printf("lbu r%d, %d(r%d)\n", rt, imm & 0xFFFF, rs);
   ac_word addr = RB[rs] + imm;
-  cache.read(addr);
+  data_cache.read(addr);
   byte = DM.read_byte(addr);
   RB[rt] = byte ;
   dbg_printf("Result = %#x\n", RB[rt]);
@@ -305,7 +312,7 @@ void ac_behavior( lh )
   short int half;
   dbg_printf("lh r%d, %d(r%d)\n", rt, imm & 0xFFFF, rs);
   ac_word addr = RB[rs] + imm;
-  cache.read(addr);
+  data_cache.read(addr);
   half = DM.read_half(addr);
   RB[rt] = (ac_Sword)half ;
   dbg_printf("Result = %#x\n", RB[rt]);
@@ -320,7 +327,7 @@ void ac_behavior( lhu )
 
   unsigned short int  half;
   ac_word addr = RB[rs] + imm;
-  cache.read(addr);
+  data_cache.read(addr);
   half = DM.read_half(addr);
   RB[rt] = half ;
   dbg_printf("Result = %#x\n", RB[rt]);
@@ -335,7 +342,7 @@ void ac_behavior( lw )
 
   dbg_printf("lw r%d, %d(r%d)\n", rt, imm & 0xFFFF, rs);
   ac_word addr = RB[rs] + imm;
-  cache.read(addr);
+  data_cache.read(addr);
   RB[rt] = DM.read(addr);
   dbg_printf("Result = %#x\n", RB[rt]);
 
@@ -353,7 +360,7 @@ void ac_behavior( lwl )
 
   addr = RB[rs] + imm;
   offset = (addr & 0x3) * 8;
-  cache.read(addr & 0xFFFFFFFC);
+  data_cache.read(addr & 0xFFFFFFFC);
   data = DM.read(addr & 0xFFFFFFFC);
   data <<= offset;
   data |= RB[rt] & ((1<<offset)-1);
@@ -374,7 +381,7 @@ void ac_behavior( lwr )
 
   addr = RB[rs] + imm;
   offset = (3 - (addr & 0x3)) * 8;
-  cache.read(addr & 0xFFFFFFFC);
+  data_cache.read(addr & 0xFFFFFFFC);
   data = DM.read(addr & 0xFFFFFFFC);
   data >>= offset;
   data |= RB[rt] & (0xFFFFFFFF << (32-offset));
@@ -394,7 +401,7 @@ void ac_behavior( sb )
   dbg_printf("sb r%d, %d(r%d)\n", rt, imm & 0xFFFF, rs);
   byte = RB[rt] & 0xFF;
   ac_word addr = RB[rs] + imm;
-  cache.write(addr);
+  data_cache.write(addr);
   DM.write_byte(addr, byte);
   dbg_printf("Result = %#x\n", (int) byte);
 };
@@ -409,7 +416,7 @@ void ac_behavior( sh )
   dbg_printf("sh r%d, %d(r%d)\n", rt, imm & 0xFFFF, rs);
   half = RB[rt] & 0xFFFF;
   ac_word addr = RB[rs] + imm;
-  cache.write(addr);
+  data_cache.write(addr);
   DM.write_half(addr, half);
   dbg_printf("Result = %#x\n", (int) half);
 };
@@ -422,7 +429,7 @@ void ac_behavior( sw )
 
   dbg_printf("sw r%d, %d(r%d)\n", rt, imm & 0xFFFF, rs);
   ac_word addr = RB[rs] + imm;
-  cache.write(addr);
+  data_cache.write(addr);
   DM.write(addr, RB[rt]);
   dbg_printf("Result = %#x\n", RB[rt]);
 };
@@ -442,7 +449,7 @@ void ac_behavior( swl )
   data = RB[rt];
   data >>= offset;
   data |= DM.read(addr & 0xFFFFFFFC) & (0xFFFFFFFF << (32-offset));
-  cache.write(addr & 0xFFFFFFFC);
+  data_cache.write(addr & 0xFFFFFFFC);
   DM.write(addr & 0xFFFFFFFC, data);
   dbg_printf("Result = %#x\n", data);
 };
@@ -462,7 +469,7 @@ void ac_behavior( swr )
   data = RB[rt];
   data <<= offset;
   data |= DM.read(addr & 0xFFFFFFFC) & ((1<<offset)-1);
-  cache.write(addr & 0xFFFFFFFC);
+  data_cache.write(addr & 0xFFFFFFFC);
   DM.write(addr & 0xFFFFFFFC, data);
   dbg_printf("Result = %#x\n", data);
 };
