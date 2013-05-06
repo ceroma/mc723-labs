@@ -96,6 +96,64 @@ void check_load_use_hazard(int rs) {
 }
 
 /**
+ * A small cache indexed by the lower portion of the address of the branch
+ * instruction that says whether the branch was recently taken or not.
+ */
+class BranchPredictionBuffer
+{
+    static const int BYTE_OFFSET = 2;
+
+    unsigned int numIndexBits;
+    unsigned int numPredictions, numWrongPredictions;
+    std::vector<bool> taken;
+
+  public:
+
+    BranchPredictionBuffer(unsigned int numIndexBits)
+      : numIndexBits(numIndexBits)
+      , numPredictions(0)
+      , numWrongPredictions(0)
+      , taken(1 << numIndexBits)
+    {
+      for (unsigned int i = 0; i < taken.size(); i++) {
+        taken[i] = false;
+      }
+    }
+
+    /**
+     * Updates memory with the latest decision for this branch instruction.
+     * Also, checks whether prediction would've been correct or not.
+     *
+     * @param address     the address of the branch instruction
+     * @param branchTaken whether the branch was taken or not
+     */
+    void update(ac_word address, bool branchTaken) {
+      bool prediction;
+      unsigned int index;
+
+      index = (address >> BYTE_OFFSET) & ~(0xFFFFFFFF << numIndexBits);
+      if (taken[index] != branchTaken) {
+        ++numWrongPredictions;
+      }
+      ++numPredictions;
+
+      taken[index] = branchTaken;
+    }
+
+    unsigned int getNumPredictions() {
+      return numPredictions;
+    }
+
+    unsigned int getNumWrongPredictions() {
+      return numWrongPredictions;
+    }
+};
+
+ac_word current_instruction;
+// Buffer with 16 positions
+BranchPredictionBuffer prediction_buffer(4);
+
+/**
  * A simple cache block without the actual data.
  */
 class CacheBlock
@@ -221,6 +279,7 @@ void ac_behavior( instruction )
   dbg_printf("----- PC=%#x ----- %lld\n", (int) ac_pc, ac_instr_counter);
   //  dbg_printf("----- PC=%#x NPC=%#x ----- %lld\n", (int) ac_pc, (int)npc, ac_instr_counter);
 #ifndef NO_NEED_PC_UPDATE
+  current_instruction = ac_pc;
   instructions_cache.read(ac_pc);
   ac_pc = npc;
   npc = ac_pc + 4;
@@ -268,6 +327,9 @@ void ac_behavior(end)
   dbg_printf("@@@ Data Cache Miss-Rate: %.2lf% @@@\n", 100 * miss_rate);
   miss_rate = instructions_cache.getMissRate();
   dbg_printf("@@@ Instructions Cache Miss-Rate: %.2lf% @@@\n", 100 * miss_rate);
+  unsigned int total = prediction_buffer.getNumPredictions();
+  unsigned int wrong = prediction_buffer.getNumWrongPredictions();
+  dbg_printf("@@@ Number of Wrong Predictions: %d/%d @@@\n", wrong, total);
   dbg_printf("@@@ Number of Load-Use Data Hazards: %d @@@\n", hazard_counter);
 }
 
@@ -893,7 +955,9 @@ void ac_behavior( beq )
   last_was_load = false;
 
   dbg_printf("beq r%d, r%d, %d\n", rt, rs, imm & 0xFFFF);
-  if( RB[rs] == RB[rt] ){
+  bool taken = RB[rs] == RB[rt];
+  prediction_buffer.update(current_instruction, taken);
+  if (taken) {
 #ifndef NO_NEED_PC_UPDATE
     npc = ac_pc + (imm<<2);
 #endif
@@ -908,7 +972,9 @@ void ac_behavior( bne )
   last_was_load = false;
 
   dbg_printf("bne r%d, r%d, %d\n", rt, rs, imm & 0xFFFF);
-  if( RB[rs] != RB[rt] ){
+  bool taken = RB[rs] != RB[rt];
+  prediction_buffer.update(current_instruction, taken);
+  if (taken) {
 #ifndef NO_NEED_PC_UPDATE
     npc = ac_pc + (imm<<2);
 #endif
@@ -923,7 +989,9 @@ void ac_behavior( blez )
   last_was_load = false;
 
   dbg_printf("blez r%d, %d\n", rs, imm & 0xFFFF);
-  if( (RB[rs] == 0 ) || (RB[rs]&0x80000000 ) ){
+  bool taken = (RB[rs] == 0) || (RB[rs] & 0x80000000);
+  prediction_buffer.update(current_instruction, taken);
+  if (taken) {
 #ifndef NO_NEED_PC_UPDATE
     npc = ac_pc + (imm<<2), 1;
 #endif
@@ -938,7 +1006,9 @@ void ac_behavior( bgtz )
   last_was_load = false;
 
   dbg_printf("bgtz r%d, %d\n", rs, imm & 0xFFFF);
-  if( !(RB[rs] & 0x80000000) && (RB[rs]!=0) ){
+  bool taken = !(RB[rs] & 0x80000000) && (RB[rs] != 0);
+  prediction_buffer.update(current_instruction, taken);
+  if (taken) {
 #ifndef NO_NEED_PC_UPDATE
     npc = ac_pc + (imm<<2);
 #endif
@@ -953,7 +1023,9 @@ void ac_behavior( bltz )
   last_was_load = false;
 
   dbg_printf("bltz r%d, %d\n", rs, imm & 0xFFFF);
-  if( RB[rs] & 0x80000000 ){
+  bool taken = RB[rs] & 0x80000000;
+  prediction_buffer.update(current_instruction, taken);
+  if (taken) {
 #ifndef NO_NEED_PC_UPDATE
     npc = ac_pc + (imm<<2);
 #endif
@@ -968,7 +1040,9 @@ void ac_behavior( bgez )
   last_was_load = false;
 
   dbg_printf("bgez r%d, %d\n", rs, imm & 0xFFFF);
-  if( !(RB[rs] & 0x80000000) ){
+  bool taken = !(RB[rs] & 0x80000000);
+  prediction_buffer.update(current_instruction, taken);
+  if (taken) {
 #ifndef NO_NEED_PC_UPDATE
     npc = ac_pc + (imm<<2);
 #endif
@@ -984,7 +1058,9 @@ void ac_behavior( bltzal )
 
   dbg_printf("bltzal r%d, %d\n", rs, imm & 0xFFFF);
   RB[Ra] = ac_pc+4; //ac_pc is pc+4, we need pc+8
-  if( RB[rs] & 0x80000000 ){
+  bool taken = RB[rs] & 0x80000000;
+  prediction_buffer.update(current_instruction, taken);
+  if (taken) {
 #ifndef NO_NEED_PC_UPDATE
     npc = ac_pc + (imm<<2);
 #endif
@@ -1001,7 +1077,9 @@ void ac_behavior( bgezal )
 
   dbg_printf("bgezal r%d, %d\n", rs, imm & 0xFFFF);
   RB[Ra] = ac_pc+4; //ac_pc is pc+4, we need pc+8
-  if( !(RB[rs] & 0x80000000) ){
+  bool taken = !(RB[rs] & 0x80000000);
+  prediction_buffer.update(current_instruction, taken);
+  if (taken) {
 #ifndef NO_NEED_PC_UPDATE
     npc = ac_pc + (imm<<2);
 #endif
