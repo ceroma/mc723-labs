@@ -128,8 +128,7 @@ class CacheBlock
 };
 
 /**
- * A simple read-only (for now) direct-mapped cache with variable number
- * of word-sized blocks.
+ * A simple direct-mapped cache with variable number of word-sized blocks.
  */
 class Cache
 {
