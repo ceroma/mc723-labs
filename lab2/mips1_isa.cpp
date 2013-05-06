@@ -102,10 +102,51 @@ void check_load_use_hazard(int rs) {
 class BranchPredictionBuffer
 {
     static const int BYTE_OFFSET = 2;
+    enum State {STRONG_TAKEN, WEAK_TAKEN, WEAK_NOT_TAKEN, STRONG_NOT_TAKEN};
 
     unsigned int numIndexBits;
     unsigned int numPredictions, numWrongPredictions;
-    std::vector<bool> taken;
+    std::vector<State> taken;
+
+    unsigned int getIndex(ac_word address) {
+      return (address >> BYTE_OFFSET) & ~(0xFFFFFFFF << numIndexBits);
+    }
+
+    /**
+     * Returns a guess on whether we should branch or not.
+     *
+     * @param address the address of the branch instruction
+     */
+    bool getPrediction(ac_word address) {
+      unsigned int index = getIndex(address);
+      return taken[index] == STRONG_TAKEN || taken[index] == WEAK_TAKEN;
+    }
+
+    /**
+     * Updates the guess based on whether the branch was actually taken or not.
+     *
+     * @param address     the address of the branch instruction
+     * @param branchTaken whether the branch was taken or not
+     */
+    void updatePrediction(ac_word address, bool branchTaken) {
+      unsigned int index = getIndex(address);
+      switch (taken[index]) {
+        case STRONG_TAKEN:
+          taken[index] = branchTaken ? STRONG_TAKEN : WEAK_TAKEN;
+          break;
+        case WEAK_TAKEN:
+          taken[index] = branchTaken ? STRONG_TAKEN : WEAK_NOT_TAKEN;
+          break;
+        case WEAK_NOT_TAKEN:
+          taken[index] = branchTaken ? WEAK_TAKEN : STRONG_NOT_TAKEN;
+          break;
+        case STRONG_NOT_TAKEN:
+          taken[index] = branchTaken ? WEAK_NOT_TAKEN : STRONG_NOT_TAKEN;
+          break;
+        default:
+          break;
+      }
+    }
 
   public:
 
@@ -116,7 +157,7 @@ class BranchPredictionBuffer
       , taken(1 << numIndexBits)
     {
       for (unsigned int i = 0; i < taken.size(); i++) {
-        taken[i] = false;
+        taken[i] = WEAK_NOT_TAKEN;
       }
     }
 
@@ -128,16 +169,12 @@ class BranchPredictionBuffer
      * @param branchTaken whether the branch was taken or not
      */
     void update(ac_word address, bool branchTaken) {
-      bool prediction;
-      unsigned int index;
-
-      index = (address >> BYTE_OFFSET) & ~(0xFFFFFFFF << numIndexBits);
-      if (taken[index] != branchTaken) {
+      if (getPrediction(address) != branchTaken) {
         ++numWrongPredictions;
       }
       ++numPredictions;
 
-      taken[index] = branchTaken;
+      updatePrediction(address, branchTaken);
     }
 
     unsigned int getNumPredictions() {
@@ -150,8 +187,8 @@ class BranchPredictionBuffer
 };
 
 ac_word current_instruction;
-// Buffer with 16 positions
-BranchPredictionBuffer prediction_buffer(4);
+// Buffer with 32 positions
+BranchPredictionBuffer prediction_buffer(5);
 
 /**
  * A simple cache block without the actual data.
