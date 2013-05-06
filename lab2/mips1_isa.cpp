@@ -221,7 +221,7 @@ void ac_behavior( instruction )
   dbg_printf("----- PC=%#x ----- %lld\n", (int) ac_pc, ac_instr_counter);
   //  dbg_printf("----- PC=%#x NPC=%#x ----- %lld\n", (int) ac_pc, (int)npc, ac_instr_counter);
 #ifndef NO_NEED_PC_UPDATE
-  instructions_cache.read(npc);
+  instructions_cache.read(ac_pc);
   ac_pc = npc;
   npc = ac_pc + 4;
 #endif
