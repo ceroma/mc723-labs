@@ -96,99 +96,139 @@ void check_load_use_hazard(int rs) {
 }
 
 /**
- * A small cache indexed by the lower portion of the address of the branch
- * instruction that says whether the branch was recently taken or not.
+ * An entry in the Branch Target Buffer.
  */
-class BranchPredictionBuffer
+class BranchTargetBufferEntry
 {
-    static const int BYTE_OFFSET = 2;
     enum State {STRONG_TAKEN, WEAK_TAKEN, WEAK_NOT_TAKEN, STRONG_NOT_TAKEN};
 
-    unsigned int numIndexBits;
-    unsigned int numPredictions, numWrongPredictions;
-    std::vector<State> taken;
+    State taken;
+    ac_word target;
 
-    unsigned int getIndex(ac_word address) {
-      return (address >> BYTE_OFFSET) & ~(0xFFFFFFFF << numIndexBits);
+  public:
+
+    BranchTargetBufferEntry() {
+      target = 0;
+      taken = WEAK_NOT_TAKEN;
+    }
+
+    /**
+     * Returns the cached branch target.
+     */
+    ac_word getPredictedTarget() {
+      return target;
     }
 
     /**
      * Returns a guess on whether we should branch or not.
-     *
-     * @param address the address of the branch instruction
      */
-    bool getPrediction(ac_word address) {
-      unsigned int index = getIndex(address);
-      return taken[index] == STRONG_TAKEN || taken[index] == WEAK_TAKEN;
+    bool getPrediction() {
+      return taken == STRONG_TAKEN || taken == WEAK_TAKEN;
     }
 
     /**
      * Updates the guess based on whether the branch was actually taken or not.
      *
-     * @param address     the address of the branch instruction
-     * @param branchTaken whether the branch was taken or not
+     * @param branchTaken  whether the branch was taken or not
+     * @param branchTarget the branch's target address
      */
-    void updatePrediction(ac_word address, bool branchTaken) {
-      unsigned int index = getIndex(address);
-      switch (taken[index]) {
+    void updatePrediction(bool branchTaken, ac_word branchTarget) {
+      target = branchTarget;
+      switch (taken) {
         case STRONG_TAKEN:
-          taken[index] = branchTaken ? STRONG_TAKEN : WEAK_TAKEN;
+          taken = branchTaken ? STRONG_TAKEN : WEAK_TAKEN;
           break;
         case WEAK_TAKEN:
-          taken[index] = branchTaken ? STRONG_TAKEN : WEAK_NOT_TAKEN;
+          taken = branchTaken ? STRONG_TAKEN : WEAK_NOT_TAKEN;
           break;
         case WEAK_NOT_TAKEN:
-          taken[index] = branchTaken ? WEAK_TAKEN : STRONG_NOT_TAKEN;
+          taken = branchTaken ? WEAK_TAKEN : STRONG_NOT_TAKEN;
           break;
         case STRONG_NOT_TAKEN:
-          taken[index] = branchTaken ? WEAK_NOT_TAKEN : STRONG_NOT_TAKEN;
+          taken = branchTaken ? WEAK_NOT_TAKEN : STRONG_NOT_TAKEN;
           break;
         default:
           break;
       }
     }
+};
+
+/**
+ * A small cache indexed by the lower portion of the address of the branch
+ * instruction that says whether the branch was recently taken or not.
+ * 
+ * It also stores the target address of the branch so that the PC can be updated
+ * right away when prediction says branch should be taken and a new cycle just
+ * for the computation of target address is avoided.
+ */
+class BranchTargetBuffer
+{
+    static const int BYTE_OFFSET = 2;
+
+    unsigned int numIndexBits;
+    unsigned int numPredictions;
+    unsigned int numWrongPredictions;
+    unsigned int numWrongPredictedTargets;
+    std::vector<BranchTargetBufferEntry> predictions;
+
+    unsigned int getIndex(ac_word address) {
+      return (address >> BYTE_OFFSET) & ~(0xFFFFFFFF << numIndexBits);
+    }
 
   public:
 
-    BranchPredictionBuffer(unsigned int numIndexBits)
+    BranchTargetBuffer(unsigned int numIndexBits)
       : numIndexBits(numIndexBits)
       , numPredictions(0)
       , numWrongPredictions(0)
-      , taken(1 << numIndexBits)
-    {
-      for (unsigned int i = 0; i < taken.size(); i++) {
-        taken[i] = WEAK_NOT_TAKEN;
-      }
-    }
+      , numWrongPredictedTargets(0)
+      , predictions(1 << numIndexBits)
+    {}
 
     /**
      * Updates memory with the latest decision for this branch instruction.
      * Also, checks whether prediction would've been correct or not.
      *
-     * @param address     the address of the branch instruction
-     * @param branchTaken whether the branch was taken or not
+     * @param address      the address of the branch instruction
+     * @param branchTaken  whether the branch was taken or not
+     * @param branchTarget the branch's target address
      */
-    void update(ac_word address, bool branchTaken) {
-      if (getPrediction(address) != branchTaken) {
+    void update(ac_word address, bool branchTaken, ac_word branchTarget) {
+      BranchTargetBufferEntry& entry = predictions[getIndex(address)];
+      bool prediction = entry.getPrediction();
+      if (prediction != branchTaken) {
         ++numWrongPredictions;
+      } else if (prediction && entry.getPredictedTarget() != branchTarget) {
+        ++numWrongPredictedTargets;
       }
       ++numPredictions;
 
-      updatePrediction(address, branchTaken);
+      entry.updatePrediction(branchTaken, branchTarget);
     }
 
     unsigned int getNumPredictions() {
       return numPredictions;
     }
 
+    /**
+     * Returns the number of times the "take or not" prediction was wrong.
+     */
     unsigned int getNumWrongPredictions() {
       return numWrongPredictions;
+    }
+
+    /**
+     * Returns the number of times the prediction was correctly "take branch",
+     * but the cached target was wrong.
+     */
+    unsigned int getNumWrongPredictedTargets() {
+      return numWrongPredictedTargets;
     }
 };
 
 ac_word current_instruction;
 // Buffer with 32 positions
-BranchPredictionBuffer prediction_buffer(5);
+BranchTargetBuffer prediction_buffer(5);
 
 /**
  * A simple cache block without the actual data.
@@ -365,8 +405,15 @@ void ac_behavior(end)
   miss_rate = instructions_cache.getMissRate();
   dbg_printf("@@@ Instructions Cache Miss-Rate: %.2lf% @@@\n", 100 * miss_rate);
   unsigned int total = prediction_buffer.getNumPredictions();
-  unsigned int wrong = prediction_buffer.getNumWrongPredictions();
-  dbg_printf("@@@ Number of Wrong Predictions: %d/%d @@@\n", wrong, total);
+  unsigned int wrong1 = prediction_buffer.getNumWrongPredictions();
+  dbg_printf("@@@ Number of Wrong Predictions: %d/%d @@@\n", wrong1, total);
+  unsigned int wrong2 = prediction_buffer.getNumWrongPredictedTargets();
+  dbg_printf(
+    "@@@ Number of Right Predictions with Wrong Target: %d/%d @@@\n",
+    wrong2,
+    total
+  );
+  dbg_printf("@@@ Number of Control Hazards: %d @@@\n", wrong1 + wrong2);
   dbg_printf("@@@ Number of Load-Use Data Hazards: %d @@@\n", hazard_counter);
 }
 
@@ -993,12 +1040,13 @@ void ac_behavior( beq )
 
   dbg_printf("beq r%d, r%d, %d\n", rt, rs, imm & 0xFFFF);
   bool taken = RB[rs] == RB[rt];
-  prediction_buffer.update(current_instruction, taken);
+  ac_word target = ac_pc + (imm << 2);
+  prediction_buffer.update(current_instruction, taken, target);
   if (taken) {
 #ifndef NO_NEED_PC_UPDATE
-    npc = ac_pc + (imm<<2);
+    npc = target;
 #endif
-    dbg_printf("Taken to %#x\n", ac_pc + (imm<<2));
+    dbg_printf("Taken to %#x\n", target);
   }	
 };
 
@@ -1010,12 +1058,13 @@ void ac_behavior( bne )
 
   dbg_printf("bne r%d, r%d, %d\n", rt, rs, imm & 0xFFFF);
   bool taken = RB[rs] != RB[rt];
-  prediction_buffer.update(current_instruction, taken);
+  ac_word target = ac_pc + (imm << 2);
+  prediction_buffer.update(current_instruction, taken, target);
   if (taken) {
 #ifndef NO_NEED_PC_UPDATE
-    npc = ac_pc + (imm<<2);
+    npc = target;
 #endif
-    dbg_printf("Taken to %#x\n", ac_pc + (imm<<2));
+    dbg_printf("Taken to %#x\n", target);
   }	
 };
 
@@ -1027,12 +1076,13 @@ void ac_behavior( blez )
 
   dbg_printf("blez r%d, %d\n", rs, imm & 0xFFFF);
   bool taken = (RB[rs] == 0) || (RB[rs] & 0x80000000);
-  prediction_buffer.update(current_instruction, taken);
+  ac_word target = ac_pc + (imm << 2);
+  prediction_buffer.update(current_instruction, taken, target);
   if (taken) {
 #ifndef NO_NEED_PC_UPDATE
-    npc = ac_pc + (imm<<2), 1;
+    npc = target, 1;
 #endif
-    dbg_printf("Taken to %#x\n", ac_pc + (imm<<2));
+    dbg_printf("Taken to %#x\n", target);
   }	
 };
 
@@ -1044,12 +1094,13 @@ void ac_behavior( bgtz )
 
   dbg_printf("bgtz r%d, %d\n", rs, imm & 0xFFFF);
   bool taken = !(RB[rs] & 0x80000000) && (RB[rs] != 0);
-  prediction_buffer.update(current_instruction, taken);
+  ac_word target = ac_pc + (imm << 2);
+  prediction_buffer.update(current_instruction, taken, target);
   if (taken) {
 #ifndef NO_NEED_PC_UPDATE
-    npc = ac_pc + (imm<<2);
+    npc = target;
 #endif
-    dbg_printf("Taken to %#x\n", ac_pc + (imm<<2));
+    dbg_printf("Taken to %#x\n", target);
   }	
 };
 
@@ -1061,12 +1112,13 @@ void ac_behavior( bltz )
 
   dbg_printf("bltz r%d, %d\n", rs, imm & 0xFFFF);
   bool taken = RB[rs] & 0x80000000;
-  prediction_buffer.update(current_instruction, taken);
+  ac_word target = ac_pc + (imm << 2);
+  prediction_buffer.update(current_instruction, taken, target);
   if (taken) {
 #ifndef NO_NEED_PC_UPDATE
-    npc = ac_pc + (imm<<2);
+    npc = target;
 #endif
-    dbg_printf("Taken to %#x\n", ac_pc + (imm<<2));
+    dbg_printf("Taken to %#x\n", target);
   }	
 };
 
@@ -1078,12 +1130,13 @@ void ac_behavior( bgez )
 
   dbg_printf("bgez r%d, %d\n", rs, imm & 0xFFFF);
   bool taken = !(RB[rs] & 0x80000000);
-  prediction_buffer.update(current_instruction, taken);
+  ac_word target = ac_pc + (imm << 2);
+  prediction_buffer.update(current_instruction, taken, target);
   if (taken) {
 #ifndef NO_NEED_PC_UPDATE
-    npc = ac_pc + (imm<<2);
+    npc = target;
 #endif
-    dbg_printf("Taken to %#x\n", ac_pc + (imm<<2));
+    dbg_printf("Taken to %#x\n", target);
   }	
 };
 
@@ -1096,12 +1149,13 @@ void ac_behavior( bltzal )
   dbg_printf("bltzal r%d, %d\n", rs, imm & 0xFFFF);
   RB[Ra] = ac_pc+4; //ac_pc is pc+4, we need pc+8
   bool taken = RB[rs] & 0x80000000;
-  prediction_buffer.update(current_instruction, taken);
+  ac_word target = ac_pc + (imm << 2);
+  prediction_buffer.update(current_instruction, taken, target);
   if (taken) {
 #ifndef NO_NEED_PC_UPDATE
-    npc = ac_pc + (imm<<2);
+    npc = target;
 #endif
-    dbg_printf("Taken to %#x\n", ac_pc + (imm<<2));
+    dbg_printf("Taken to %#x\n", target);
   }	
   dbg_printf("Return = %#x\n", ac_pc+4);
 };
@@ -1115,12 +1169,13 @@ void ac_behavior( bgezal )
   dbg_printf("bgezal r%d, %d\n", rs, imm & 0xFFFF);
   RB[Ra] = ac_pc+4; //ac_pc is pc+4, we need pc+8
   bool taken = !(RB[rs] & 0x80000000);
-  prediction_buffer.update(current_instruction, taken);
+  ac_word target = ac_pc + (imm << 2);
+  prediction_buffer.update(current_instruction, taken, target);
   if (taken) {
 #ifndef NO_NEED_PC_UPDATE
-    npc = ac_pc + (imm<<2);
+    npc = target;
 #endif
-    dbg_printf("Taken to %#x\n", ac_pc + (imm<<2));
+    dbg_printf("Taken to %#x\n", target);
   }	
   dbg_printf("Return = %#x\n", ac_pc+4);
 };
