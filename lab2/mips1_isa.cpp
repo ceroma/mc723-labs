@@ -58,7 +58,7 @@ using namespace mips1_parms;
  */
 class Instruction
 {
-    enum Type {LOAD, OTHER};
+    enum Type {ALU, LOAD, OTHER};
 
     Type type;
     int destinationRegister;
@@ -68,6 +68,16 @@ class Instruction
     Instruction() {
       type = OTHER;
       destinationRegister = -1;
+    }
+
+    /**
+     * Marks this is an ALU instruction.
+     *
+     * @param rd register being modified by the ALU instruction
+     */
+    void setIsALU(int rd) {
+      type = ALU;
+      destinationRegister = rd;
     }
 
     /**
@@ -88,6 +98,10 @@ class Instruction
       destinationRegister = -1;
     }
 
+    bool isALU() {
+      return type == ALU;
+    }
+
     bool isLoad() {
       return type == LOAD;
     }
@@ -98,9 +112,11 @@ class Instruction
 };
 
 Instruction lastInstruction;
+Instruction lastLastInstruction;
 
 // Hazard counters
-int num_load_use_data_hazards = 0;
+unsigned int num_branch_data_hazards = 0;
+unsigned int num_load_use_data_hazards = 0;
 
 /**
  * Check for a load-use data hazard.
@@ -129,6 +145,52 @@ void check_load_use_hazard(int rs, int rt)
  */
 void check_load_use_hazard(int rs) {
   check_load_use_hazard(rs, -2);
+}
+
+/**
+ * Check for a branch data hazard.
+ * There's a branch data hazard when a comparison register is a destination of
+ * a preceding ALU instruction, preceding load instruction or second preceding
+ * load instruction.
+ *
+ * @param rs register being used as rs by the current instruction
+ * @param rt register being used as rt by the current instruction
+ */
+void check_branch_data_hazard(int rs, int rt)
+{
+  // Early return
+  if (!lastInstruction.isALU() &&
+      !lastInstruction.isLoad() &&
+      !lastLastInstruction.isLoad()) {
+    return;
+  }
+
+  int rd = lastInstruction.getDestinationRegister();
+  if (lastInstruction.isLoad() && (rs == rd || rt == rd)) {
+    num_branch_data_hazards += 2;
+    return;
+  }
+
+  if (lastInstruction.isALU() && (rs == rd || rt == rd)) {
+    ++num_branch_data_hazards;
+    return;
+  }
+
+  rd = lastLastInstruction.getDestinationRegister();
+  if (lastLastInstruction.isLoad() && (rs == rd || rt == rd)) {
+    ++num_branch_data_hazards;
+    return;
+  }
+}
+
+/**
+ * Same as above, but to be used by branch instructions that only use one of
+ * the registers as source.
+ *
+ * @param rs register being used as source by the current instruction
+ */
+void check_branch_data_hazard(int rs) {
+  check_branch_data_hazard(rs, -2);
 }
 
 /**
@@ -403,13 +465,13 @@ void ac_behavior( instruction )
 void ac_behavior( Type_R )
 {
   check_load_use_hazard(rs, rt);
-  lastInstruction.setIsOther();
 }
 
 void ac_behavior( Type_I ){}
 
 void ac_behavior( Type_J )
 {
+  lastLastInstruction = lastInstruction;
   lastInstruction.setIsOther();
 }
 
@@ -426,6 +488,7 @@ void ac_behavior(begin)
   hi = 0;
   lo = 0;
 
+  num_branch_data_hazards = 0;
   num_load_use_data_hazards = 0;
 }
 
@@ -449,6 +512,10 @@ void ac_behavior(end)
   );
   dbg_printf("@@@ Number of Control Hazards: %d @@@\n", wrong1 + wrong2);
   dbg_printf(
+    "@@@ Number of Branch Data Hazards: %d @@@\n",
+    num_branch_data_hazards
+  );
+  dbg_printf(
     "@@@ Number of Load-Use Data Hazards: %d @@@\n",
     num_load_use_data_hazards
   );
@@ -467,6 +534,7 @@ void ac_behavior( lb )
   RB[rt] = (ac_Sword)byte ;
   dbg_printf("Result = %#x\n", RB[rt]);
 
+  lastLastInstruction = lastInstruction;
   lastInstruction.setIsLoad(rt);
 };
 
@@ -483,6 +551,7 @@ void ac_behavior( lbu )
   RB[rt] = byte ;
   dbg_printf("Result = %#x\n", RB[rt]);
 
+  lastLastInstruction = lastInstruction;
   lastInstruction.setIsLoad(rt);
 };
 
@@ -499,6 +568,7 @@ void ac_behavior( lh )
   RB[rt] = (ac_Sword)half ;
   dbg_printf("Result = %#x\n", RB[rt]);
 
+  lastLastInstruction = lastInstruction;
   lastInstruction.setIsLoad(rt);
 };
 
@@ -514,6 +584,7 @@ void ac_behavior( lhu )
   RB[rt] = half ;
   dbg_printf("Result = %#x\n", RB[rt]);
 
+  lastLastInstruction = lastInstruction;
   lastInstruction.setIsLoad(rt);
 };
 
@@ -528,6 +599,7 @@ void ac_behavior( lw )
   RB[rt] = DM.read(addr);
   dbg_printf("Result = %#x\n", RB[rt]);
 
+  lastLastInstruction = lastInstruction;
   lastInstruction.setIsLoad(rt);
 };
 
@@ -549,6 +621,7 @@ void ac_behavior( lwl )
   RB[rt] = data;
   dbg_printf("Result = %#x\n", RB[rt]);
 
+  lastLastInstruction = lastInstruction;
   lastInstruction.setIsLoad(rt);
 };
 
@@ -570,6 +643,7 @@ void ac_behavior( lwr )
   RB[rt] = data;
   dbg_printf("Result = %#x\n", RB[rt]);
 
+  lastLastInstruction = lastInstruction;
   lastInstruction.setIsLoad(rt);
 };
 
@@ -586,6 +660,7 @@ void ac_behavior( sb )
   DM.write_byte(addr, byte);
   dbg_printf("Result = %#x\n", (int) byte);
 
+  lastLastInstruction = lastInstruction;
   lastInstruction.setIsOther();
 };
 
@@ -602,6 +677,7 @@ void ac_behavior( sh )
   DM.write_half(addr, half);
   dbg_printf("Result = %#x\n", (int) half);
 
+  lastLastInstruction = lastInstruction;
   lastInstruction.setIsOther();
 };
 
@@ -616,6 +692,7 @@ void ac_behavior( sw )
   DM.write(addr, RB[rt]);
   dbg_printf("Result = %#x\n", RB[rt]);
 
+  lastLastInstruction = lastInstruction;
   lastInstruction.setIsOther();
 };
 
@@ -637,6 +714,7 @@ void ac_behavior( swl )
   DM.write(addr & 0xFFFFFFFC, data);
   dbg_printf("Result = %#x\n", data);
 
+  lastLastInstruction = lastInstruction;
   lastInstruction.setIsOther();
 };
 
@@ -658,6 +736,7 @@ void ac_behavior( swr )
   DM.write(addr & 0xFFFFFFFC, data);
   dbg_printf("Result = %#x\n", data);
 
+  lastLastInstruction = lastInstruction;
   lastInstruction.setIsOther();
 };
 
@@ -675,7 +754,8 @@ void ac_behavior( addi )
     fprintf(stderr, "EXCEPTION(addi): integer overflow.\n"); exit(EXIT_FAILURE);
   }
 
-  lastInstruction.setIsOther();
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rt);
 };
 
 //!Instruction addiu behavior method.
@@ -687,7 +767,8 @@ void ac_behavior( addiu )
   RB[rt] = RB[rs] + imm;
   dbg_printf("Result = %#x\n", RB[rt]);
 
-  lastInstruction.setIsOther();
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rt);
 };
 
 //!Instruction slti behavior method.
@@ -704,7 +785,8 @@ void ac_behavior( slti )
     RB[rt] = 0;
   dbg_printf("Result = %#x\n", RB[rt]);
 
-  lastInstruction.setIsOther();
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rt);
 };
 
 //!Instruction sltiu behavior method.
@@ -721,7 +803,8 @@ void ac_behavior( sltiu )
     RB[rt] = 0;
   dbg_printf("Result = %#x\n", RB[rt]);
 
-  lastInstruction.setIsOther();
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rt);
 };
 
 //!Instruction andi behavior method.
@@ -733,7 +816,8 @@ void ac_behavior( andi )
   RB[rt] = RB[rs] & (imm & 0xFFFF) ;
   dbg_printf("Result = %#x\n", RB[rt]);
 
-  lastInstruction.setIsOther();
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rt);
 };
 
 //!Instruction ori behavior method.
@@ -745,7 +829,8 @@ void ac_behavior( ori )
   RB[rt] = RB[rs] | (imm & 0xFFFF) ;
   dbg_printf("Result = %#x\n", RB[rt]);
 
-  lastInstruction.setIsOther();
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rt);
 };
 
 //!Instruction xori behavior method.
@@ -757,7 +842,8 @@ void ac_behavior( xori )
   RB[rt] = RB[rs] ^ (imm & 0xFFFF) ;
   dbg_printf("Result = %#x\n", RB[rt]);
 
-  lastInstruction.setIsOther();
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rt);
 };
 
 //!Instruction lui behavior method.
@@ -772,7 +858,8 @@ void ac_behavior( lui )
   RB[rt] = imm << 16;
   dbg_printf("Result = %#x\n", RB[rt]);
 
-  lastInstruction.setIsOther();
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rt);
 };
 
 //!Instruction add behavior method.
@@ -786,6 +873,9 @@ void ac_behavior( add )
        ((RB[rd] & 0x80000000) != (RB[rt] & 0x80000000)) ) {
     fprintf(stderr, "EXCEPTION(add): integer overflow.\n"); exit(EXIT_FAILURE);
   }
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rd);
 };
 
 //!Instruction addu behavior method.
@@ -796,6 +886,9 @@ void ac_behavior( addu )
   //cout << "  RS: " << (unsigned int)RB[rs] << " RT: " << (unsigned int)RB[rt] << endl;
   //cout << "  Result =  " <<  (unsigned int)RB[rd] <<endl;
   dbg_printf("Result = %#x\n", RB[rd]);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rd);
 };
 
 //!Instruction sub behavior method.
@@ -805,6 +898,9 @@ void ac_behavior( sub )
   RB[rd] = RB[rs] - RB[rt];
   dbg_printf("Result = %#x\n", RB[rd]);
   //TODO: test integer overflow exception for sub
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rd);
 };
 
 //!Instruction subu behavior method.
@@ -813,6 +909,9 @@ void ac_behavior( subu )
   dbg_printf("subu r%d, r%d, r%d\n", rd, rs, rt);
   RB[rd] = RB[rs] - RB[rt];
   dbg_printf("Result = %#x\n", RB[rd]);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rd);
 };
 
 //!Instruction slt behavior method.
@@ -826,6 +925,9 @@ void ac_behavior( slt )
   else
     RB[rd] = 0;
   dbg_printf("Result = %#x\n", RB[rd]);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rd);
 };
 
 //!Instruction sltu behavior method.
@@ -839,6 +941,9 @@ void ac_behavior( sltu )
   else
     RB[rd] = 0;
   dbg_printf("Result = %#x\n", RB[rd]);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rd);
 };
 
 //!Instruction instr_and behavior method.
@@ -847,6 +952,9 @@ void ac_behavior( instr_and )
   dbg_printf("instr_and r%d, r%d, r%d\n", rd, rs, rt);
   RB[rd] = RB[rs] & RB[rt];
   dbg_printf("Result = %#x\n", RB[rd]);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rd);
 };
 
 //!Instruction instr_or behavior method.
@@ -855,6 +963,9 @@ void ac_behavior( instr_or )
   dbg_printf("instr_or r%d, r%d, r%d\n", rd, rs, rt);
   RB[rd] = RB[rs] | RB[rt];
   dbg_printf("Result = %#x\n", RB[rd]);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rd);
 };
 
 //!Instruction instr_xor behavior method.
@@ -863,6 +974,9 @@ void ac_behavior( instr_xor )
   dbg_printf("instr_xor r%d, r%d, r%d\n", rd, rs, rt);
   RB[rd] = RB[rs] ^ RB[rt];
   dbg_printf("Result = %#x\n", RB[rd]);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rd);
 };
 
 //!Instruction instr_nor behavior method.
@@ -871,12 +985,18 @@ void ac_behavior( instr_nor )
   dbg_printf("nor r%d, r%d, r%d\n", rd, rs, rt);
   RB[rd] = ~(RB[rs] | RB[rt]);
   dbg_printf("Result = %#x\n", RB[rd]);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rd);
 };
 
 //!Instruction nop behavior method.
 void ac_behavior( nop )
 {
   dbg_printf("nop\n");
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsOther();
 };
 
 //!Instruction sll behavior method.
@@ -885,6 +1005,9 @@ void ac_behavior( sll )
   dbg_printf("sll r%d, r%d, %d\n", rd, rs, shamt);
   RB[rd] = RB[rt] << shamt;
   dbg_printf("Result = %#x\n", RB[rd]);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rd);
 };
 
 //!Instruction srl behavior method.
@@ -893,6 +1016,9 @@ void ac_behavior( srl )
   dbg_printf("srl r%d, r%d, %d\n", rd, rs, shamt);
   RB[rd] = RB[rt] >> shamt;
   dbg_printf("Result = %#x\n", RB[rd]);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rd);
 };
 
 //!Instruction sra behavior method.
@@ -901,6 +1027,9 @@ void ac_behavior( sra )
   dbg_printf("sra r%d, r%d, %d\n", rd, rs, shamt);
   RB[rd] = (ac_Sword) RB[rt] >> shamt;
   dbg_printf("Result = %#x\n", RB[rd]);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rd);
 };
 
 //!Instruction sllv behavior method.
@@ -909,6 +1038,9 @@ void ac_behavior( sllv )
   dbg_printf("sllv r%d, r%d, r%d\n", rd, rt, rs);
   RB[rd] = RB[rt] << (RB[rs] & 0x1F);
   dbg_printf("Result = %#x\n", RB[rd]);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rd);
 };
 
 //!Instruction srlv behavior method.
@@ -917,6 +1049,9 @@ void ac_behavior( srlv )
   dbg_printf("srlv r%d, r%d, r%d\n", rd, rt, rs);
   RB[rd] = RB[rt] >> (RB[rs] & 0x1F);
   dbg_printf("Result = %#x\n", RB[rd]);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rd);
 };
 
 //!Instruction srav behavior method.
@@ -925,6 +1060,9 @@ void ac_behavior( srav )
   dbg_printf("srav r%d, r%d, r%d\n", rd, rt, rs);
   RB[rd] = (ac_Sword) RB[rt] >> (RB[rs] & 0x1F);
   dbg_printf("Result = %#x\n", RB[rd]);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rd);
 };
 
 //!Instruction mult behavior method.
@@ -947,6 +1085,9 @@ void ac_behavior( mult )
   hi = half_result ;
 
   dbg_printf("Result = %#llx\n", result);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsOther();
 };
 
 //!Instruction multu behavior method.
@@ -969,6 +1110,9 @@ void ac_behavior( multu )
   hi = half_result ;
 
   dbg_printf("Result = %#llx\n", result);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsOther();
 };
 
 //!Instruction div behavior method.
@@ -979,6 +1123,9 @@ void ac_behavior( div )
   lo = (ac_Sword) RB[rs] / (ac_Sword) RB[rt];
   // Register HI receives remainder
   hi = (ac_Sword) RB[rs] % (ac_Sword) RB[rt];
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsOther();
 };
 
 //!Instruction divu behavior method.
@@ -989,6 +1136,9 @@ void ac_behavior( divu )
   lo = RB[rs] / RB[rt];
   // Register HI receives remainder
   hi = RB[rs] % RB[rt];
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsOther();
 };
 
 //!Instruction mfhi behavior method.
@@ -997,6 +1147,9 @@ void ac_behavior( mfhi )
   dbg_printf("mfhi r%d\n", rd);
   RB[rd] = hi;
   dbg_printf("Result = %#x\n", RB[rd]);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rd);
 };
 
 //!Instruction mthi behavior method.
@@ -1005,6 +1158,9 @@ void ac_behavior( mthi )
   dbg_printf("mthi r%d\n", rs);
   hi = RB[rs];
   dbg_printf("Result = %#x\n", (unsigned int)hi);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsOther();
 };
 
 //!Instruction mflo behavior method.
@@ -1013,6 +1169,9 @@ void ac_behavior( mflo )
   dbg_printf("mflo r%d\n", rd);
   RB[rd] = lo;
   dbg_printf("Result = %#x\n", RB[rd]);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rd);
 };
 
 //!Instruction mtlo behavior method.
@@ -1021,6 +1180,9 @@ void ac_behavior( mtlo )
   dbg_printf("mtlo r%d\n", rs);
   lo = RB[rs];
   dbg_printf("Result = %#x\n", (unsigned int)lo);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsOther();
 };
 
 //!Instruction j behavior method.
@@ -1062,6 +1224,9 @@ void ac_behavior( jr )
   npc = RB[rs], 1;
 #endif
   dbg_printf("Target = %#x\n", RB[rs]);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsOther();
 };
 
 //!Instruction jalr behavior method.
@@ -1080,12 +1245,15 @@ void ac_behavior( jalr )
     rd = Ra;
   RB[rd] = ac_pc+4;
   dbg_printf("Return = %#x\n", ac_pc+4);
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsALU(rd);
 };
 
 //!Instruction beq behavior method.
 void ac_behavior( beq )
 {
-  check_load_use_hazard(rs, rt);
+  check_branch_data_hazard(rs, rt);
 
   dbg_printf("beq r%d, r%d, %d\n", rt, rs, imm & 0xFFFF);
   bool taken = RB[rs] == RB[rt];
@@ -1098,13 +1266,14 @@ void ac_behavior( beq )
     dbg_printf("Taken to %#x\n", target);
   }	
 
+  lastLastInstruction = lastInstruction;
   lastInstruction.setIsOther();
 };
 
 //!Instruction bne behavior method.
 void ac_behavior( bne )
 {	
-  check_load_use_hazard(rs, rt);
+  check_branch_data_hazard(rs, rt);
 
   dbg_printf("bne r%d, r%d, %d\n", rt, rs, imm & 0xFFFF);
   bool taken = RB[rs] != RB[rt];
@@ -1116,12 +1285,15 @@ void ac_behavior( bne )
 #endif
     dbg_printf("Taken to %#x\n", target);
   }	
+
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsOther();
 };
 
 //!Instruction blez behavior method.
 void ac_behavior( blez )
 {
-  check_load_use_hazard(rs);
+  check_branch_data_hazard(rs);
 
   dbg_printf("blez r%d, %d\n", rs, imm & 0xFFFF);
   bool taken = (RB[rs] == 0) || (RB[rs] & 0x80000000);
@@ -1134,13 +1306,14 @@ void ac_behavior( blez )
     dbg_printf("Taken to %#x\n", target);
   }	
 
+  lastLastInstruction = lastInstruction;
   lastInstruction.setIsOther();
 };
 
 //!Instruction bgtz behavior method.
 void ac_behavior( bgtz )
 {
-  check_load_use_hazard(rs);
+  check_branch_data_hazard(rs);
 
   dbg_printf("bgtz r%d, %d\n", rs, imm & 0xFFFF);
   bool taken = !(RB[rs] & 0x80000000) && (RB[rs] != 0);
@@ -1153,13 +1326,14 @@ void ac_behavior( bgtz )
     dbg_printf("Taken to %#x\n", target);
   }	
 
+  lastLastInstruction = lastInstruction;
   lastInstruction.setIsOther();
 };
 
 //!Instruction bltz behavior method.
 void ac_behavior( bltz )
 {
-  check_load_use_hazard(rs);
+  check_branch_data_hazard(rs);
 
   dbg_printf("bltz r%d, %d\n", rs, imm & 0xFFFF);
   bool taken = RB[rs] & 0x80000000;
@@ -1172,13 +1346,14 @@ void ac_behavior( bltz )
     dbg_printf("Taken to %#x\n", target);
   }	
 
+  lastLastInstruction = lastInstruction;
   lastInstruction.setIsOther();
 };
 
 //!Instruction bgez behavior method.
 void ac_behavior( bgez )
 {
-  check_load_use_hazard(rs);
+  check_branch_data_hazard(rs);
 
   dbg_printf("bgez r%d, %d\n", rs, imm & 0xFFFF);
   bool taken = !(RB[rs] & 0x80000000);
@@ -1191,13 +1366,14 @@ void ac_behavior( bgez )
     dbg_printf("Taken to %#x\n", target);
   }	
 
+  lastLastInstruction = lastInstruction;
   lastInstruction.setIsOther();
 };
 
 //!Instruction bltzal behavior method.
 void ac_behavior( bltzal )
 {
-  check_load_use_hazard(rs);
+  check_branch_data_hazard(rs);
 
   dbg_printf("bltzal r%d, %d\n", rs, imm & 0xFFFF);
   RB[Ra] = ac_pc+4; //ac_pc is pc+4, we need pc+8
@@ -1218,7 +1394,7 @@ void ac_behavior( bltzal )
 //!Instruction bgezal behavior method.
 void ac_behavior( bgezal )
 {
-  check_load_use_hazard(rs);
+  check_branch_data_hazard(rs);
 
   dbg_printf("bgezal r%d, %d\n", rs, imm & 0xFFFF);
   RB[Ra] = ac_pc+4; //ac_pc is pc+4, we need pc+8
@@ -1233,12 +1409,15 @@ void ac_behavior( bgezal )
   }	
   dbg_printf("Return = %#x\n", ac_pc+4);
 
+  lastLastInstruction = lastInstruction;
   lastInstruction.setIsOther();
 };
 
 //!Instruction sys_call behavior method.
 void ac_behavior( sys_call )
 {
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsOther();
   dbg_printf("syscall\n");
   stop();
 }
@@ -1246,6 +1425,8 @@ void ac_behavior( sys_call )
 //!Instruction instr_break behavior method.
 void ac_behavior( instr_break )
 {
+  lastLastInstruction = lastInstruction;
+  lastInstruction.setIsOther();
   fprintf(stderr, "instr_break behavior not implemented.\n");
   exit(EXIT_FAILURE);
 }
