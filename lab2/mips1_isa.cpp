@@ -58,7 +58,7 @@ using namespace mips1_parms;
  */
 class Instruction
 {
-    enum Type {ALU, LOAD, OTHER};
+    enum Type {ALU, LOAD, NOP, OTHER};
 
     Type type;
     int destinationRegister;
@@ -91,6 +91,14 @@ class Instruction
     }
 
     /**
+     * Marks this is a nop instruction.
+     */
+    void setIsNop() {
+      type = NOP;
+      destinationRegister = -1;
+    }
+
+    /**
      * Marks this is not a load instruction.
      */
     void setIsOther() {
@@ -104,6 +112,10 @@ class Instruction
 
     bool isLoad() {
       return type == LOAD;
+    }
+
+    bool isNop() {
+      return type == NOP;
     }
 
     int getDestinationRegister() {
@@ -129,11 +141,19 @@ unsigned int num_load_use_data_hazards = 0;
  */
 void check_load_use_hazard(int rs, int rt)
 {
-  bool last_was_load = lastInstruction.isLoad();
-  int loaded_register = lastInstruction.getDestinationRegister();
-  if (last_was_load && (rs == loaded_register || rt == loaded_register)) {
-    ++num_load_use_data_hazards;
+  int rd = lastInstruction.getDestinationRegister();
+  if (lastInstruction.isLoad() && (rs == rd || rt == rd)) {
     dbg_printf("Load-Use Data Hazard!\n");
+    ++num_load_use_data_hazards;
+    return;
+  }
+
+  rd = lastLastInstruction.getDestinationRegister();
+  if (lastInstruction.isNop() &&
+      lastLastInstruction.isLoad() && (rs == rd || rt == rd)) {
+    dbg_printf("Compiler-Handled Load-Use Data Hazard!\n");
+    ++num_load_use_data_hazards;
+    return;
   }
 }
 
@@ -167,17 +187,20 @@ void check_branch_data_hazard(int rs, int rt)
 
   int rd = lastInstruction.getDestinationRegister();
   if (lastInstruction.isLoad() && (rs == rd || rt == rd)) {
+    dbg_printf("Branch Data Hazard!\n");
     num_branch_data_hazards += 2;
     return;
   }
 
   if (lastInstruction.isALU() && (rs == rd || rt == rd)) {
+    dbg_printf("Branch Data Hazard!\n");
     ++num_branch_data_hazards;
     return;
   }
 
   rd = lastLastInstruction.getDestinationRegister();
   if (lastLastInstruction.isLoad() && (rs == rd || rt == rd)) {
+    dbg_printf("Branch Data Hazard!\n");
     ++num_branch_data_hazards;
     return;
   }
@@ -996,7 +1019,7 @@ void ac_behavior( nop )
   dbg_printf("nop\n");
 
   lastLastInstruction = lastInstruction;
-  lastInstruction.setIsOther();
+  lastInstruction.setIsNop();
 };
 
 //!Instruction sll behavior method.
