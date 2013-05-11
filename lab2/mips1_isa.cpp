@@ -127,8 +127,8 @@ Instruction lastInstruction;
 Instruction lastLastInstruction;
 
 // Hazard counters
-unsigned int num_branch_data_hazards = 0;
-unsigned int num_load_use_data_hazards = 0;
+uint64_t num_branch_data_hazards = 0;
+uint64_t num_load_use_data_hazards = 0;
 
 /**
  * Check for a load-use data hazard.
@@ -286,19 +286,19 @@ class BranchTargetBuffer
 {
     static const int BYTE_OFFSET = 2;
 
-    unsigned int numIndexBits;
-    unsigned int numPredictions;
-    unsigned int numWrongPredictions;
-    unsigned int numWrongPredictedTargets;
+    uint32_t numIndexBits;
+    uint64_t numPredictions;
+    uint64_t numWrongPredictions;
+    uint64_t numWrongPredictedTargets;
     std::vector<BranchTargetBufferEntry> predictions;
 
-    unsigned int getIndex(ac_word address) {
+    uint32_t getIndex(ac_word address) {
       return (address >> BYTE_OFFSET) & ~(0xFFFFFFFF << numIndexBits);
     }
 
   public:
 
-    BranchTargetBuffer(unsigned int numIndexBits)
+    BranchTargetBuffer(uint32_t numIndexBits)
       : numIndexBits(numIndexBits)
       , numPredictions(0)
       , numWrongPredictions(0)
@@ -327,14 +327,14 @@ class BranchTargetBuffer
       entry.updatePrediction(branchTaken, branchTarget);
     }
 
-    unsigned int getNumPredictions() {
+    uint64_t getNumPredictions() {
       return numPredictions;
     }
 
     /**
      * Returns the number of times the "take or not" prediction was wrong.
      */
-    unsigned int getNumWrongPredictions() {
+    uint64_t getNumWrongPredictions() {
       return numWrongPredictions;
     }
 
@@ -342,7 +342,7 @@ class BranchTargetBuffer
      * Returns the number of times the prediction was correctly "take branch",
      * but the cached target was wrong.
      */
-    unsigned int getNumWrongPredictedTargets() {
+    uint64_t getNumWrongPredictedTargets() {
       return numWrongPredictedTargets;
     }
 };
@@ -357,7 +357,7 @@ BranchTargetBuffer prediction_buffer(5);
 class CacheBlock
 {
     bool valid;
-    unsigned int tag;
+    uint32_t tag;
 
   public:
 
@@ -369,12 +369,12 @@ class CacheBlock
     /**
      * Saves the information about the address that was loaded into this block.
      */
-    void set(unsigned int tag) {
+    void set(uint32_t tag) {
       valid = true;
       this->tag = tag;
     }
 
-    unsigned int getTag() {
+    uint32_t getTag() {
       return tag;
     }
 
@@ -390,11 +390,11 @@ class Cache
 {
     static const int BYTE_OFFSET = 2;
 
-    unsigned int readHits, readMisses;
-    unsigned int writeHits, writeMisses;
-    unsigned int numIndexBits, numTagBits;
+    uint64_t readHits, readMisses;
+    uint64_t writeHits, writeMisses;
+    uint32_t numIndexBits, numTagBits;
 
-    unsigned int numBlocks;
+    uint32_t numBlocks;
     std::vector<CacheBlock> blocks;
 
     /**
@@ -407,9 +407,9 @@ class Cache
      */
     void access(
         ac_word address,
-        unsigned int& hitCounter,
-        unsigned int& missCounter) {
-      unsigned int tag, index;
+        uint64_t& hitCounter,
+        uint64_t& missCounter) {
+      uint32_t tag, index;
 
       address >>= AC_WORDSIZE - numTagBits - numIndexBits;
       tag = address >> numIndexBits;
@@ -426,7 +426,7 @@ class Cache
 
   public:
 
-    Cache(unsigned int numIndexBits, unsigned int numBlockIndexBits)
+    Cache(uint32_t numIndexBits, uint32_t numBlockIndexBits)
       : readHits(0)
       , readMisses(0)
       , writeHits(0)
@@ -524,22 +524,22 @@ void ac_behavior(end)
   dbg_printf("@@@ Data Cache Miss-Rate: %.2lf% @@@\n", 100 * miss_rate);
   miss_rate = instructions_cache.getMissRate();
   dbg_printf("@@@ Instructions Cache Miss-Rate: %.2lf% @@@\n", 100 * miss_rate);
-  unsigned int total = prediction_buffer.getNumPredictions();
-  unsigned int wrong1 = prediction_buffer.getNumWrongPredictions();
-  dbg_printf("@@@ Number of Wrong Predictions: %d/%d @@@\n", wrong1, total);
+  uint64_t total = prediction_buffer.getNumPredictions();
+  uint64_t wrong1 = prediction_buffer.getNumWrongPredictions();
+  dbg_printf("@@@ Number of Wrong Predictions: %llu/%llu @@@\n", wrong1, total);
   unsigned int wrong2 = prediction_buffer.getNumWrongPredictedTargets();
   dbg_printf(
-    "@@@ Number of Right Predictions with Wrong Target: %d/%d @@@\n",
+    "@@@ Number of Right Predictions with Wrong Target: %llu/%llu @@@\n",
     wrong2,
     total
   );
-  dbg_printf("@@@ Number of Control Hazards: %d @@@\n", wrong1 + wrong2);
+  dbg_printf("@@@ Number of Control Hazards: %llu @@@\n", wrong1 + wrong2);
   dbg_printf(
-    "@@@ Number of Branch Data Hazards: %d @@@\n",
+    "@@@ Number of Branch Data Hazards: %llu @@@\n",
     num_branch_data_hazards
   );
   dbg_printf(
-    "@@@ Number of Load-Use Data Hazards: %d @@@\n",
+    "@@@ Number of Load-Use Data Hazards: %llu @@@\n",
     num_load_use_data_hazards
   );
 }
