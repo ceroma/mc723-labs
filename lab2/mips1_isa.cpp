@@ -466,10 +466,10 @@ class Cache
     }
 };
 
-// 256KB cache: 1024 (2^10) lines * 64 (2^6) words/block
-Cache data_cache(10, 6);
-// 64KB cache: 2 (2^1) lines * 8192 (2^13) words/block
-Cache instructions_cache(1, 13);
+// 8KB cache: 256 (2^8) lines * 8 (2^3) words/block
+Cache data_cache(8, 3);
+// 1KB cache: 2 (2^1) lines * 128 (2^7) words/block
+Cache instructions_cache(1, 7);
 
 //!Generic instruction behavior method.
 void ac_behavior( instruction )
