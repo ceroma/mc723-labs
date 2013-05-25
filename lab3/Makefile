@@ -10,7 +10,7 @@ PLATFORM := helloworld_mips.01
 export SYSTEMC :=  /home/staff/rodolfo/mc723/systemc
 
 # Variable that points to TLM installation path
-export TLM_PATH := /home/staff/rodolfo/mc723/tlm
+export TLM_PATH := /home/staff/rodolfo/mc723/systemc/include
 
 # Variable that points to ArchC installation path
 export ARCHC_PATH = /home/staff/rodolfo/mc723/archc
@@ -25,7 +25,7 @@ export ARP:=$(PWD)
 
 include platforms/$(PLATFORM)/defs.arp
 
-export HOST_OS:= linux
+export HOST_OS:= linux64
 
 export LIB_DIR:=-L $(SYSTEMC)/lib-$(HOST_OS) -L $(ARCHC_PATH)/lib \
   $(foreach ip, $(IP), -L $(ARP)/ip/$(ip)) \
