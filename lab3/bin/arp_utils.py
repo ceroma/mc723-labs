@@ -14,15 +14,15 @@ def getdefstructure(filename):
     mpc = repc.match(lines)
     msw = resw.match(lines)
     mwr = rewr.match(lines)
-    if mip: 
+    if mip:
       for y in lines[mip.end():].split(): platstruct.append("ip/"+y)
-    elif mis: 
+    elif mis:
       for y in lines[mis.end():].split(): platstruct.append("is/"+y)
-    elif msw: 
+    elif msw:
       for y in lines[msw.end():].split(): platstruct.append("sw/"+y)
-    elif mwr: 
+    elif mwr:
       for y in lines[mwr.end():].split(): platstruct.append("wrappers/"+y)
-    elif mpc: 
+    elif mpc:
       for y in lines[mpc.end():].split(): platstruct.append("processors/"+y)
     platname = "reserved"
   try:

@@ -19,7 +19,7 @@ Run this example:
   - Change PLATFORM to helloworld_mips.01
 - Run example
   $make run
-  
+
 If you don't have mips cross-compiler, you can still run the example by running
 make run-bin.
 

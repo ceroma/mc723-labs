@@ -11,7 +11,7 @@
  * IC-UNICAMP                                         *
  * http://www.lsc.ic.unicamp.br                       *
  ******************************************************/
- 
+
 // Rodolfo editou aqui
 //
 const char *project_name="mips1";
@@ -37,7 +37,7 @@ int sc_main(int ac, char *av[])
 
 #ifdef AC_DEBUG
   ac_trace("mips1_proc1.trace");
-#endif 
+#endif
 
   mips1_proc1.DM_port(router.target_export);
   router.mem_port(mem.target_export);
@@ -53,11 +53,11 @@ int sc_main(int ac, char *av[])
 #ifdef AC_STATS
   mips1_proc1.ac_sim_stats.time = sc_simulation_time();
   mips1_proc1.ac_sim_stats.print();
-#endif 
+#endif
 
 #ifdef AC_DEBUG
   ac_close_trace();
-#endif 
+#endif
 
   return mips1_proc1.ac_exit_status;
 }

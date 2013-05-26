@@ -16,7 +16,7 @@ actions=[
 ]
 
 options=["--tree", "--version", "--pretend","--help"]
-shortmapping={"P":"--pack", "U":"--unpack", "L":"--list", 
+shortmapping={"P":"--pack", "U":"--unpack", "L":"--list",
               "D":"--delete", "M":"--make", "T":"--test",
               "h":"--help","h":"--help",
               "t":"--tree","v":"--version","p":"--pretend"}
@@ -138,7 +138,7 @@ if ("--tree" in myopts) and ( "list" != myaction):
 
 if "unpack" in myaction:
   for x in myfiles:
-    if not os.path.exists(x): 
+    if not os.path.exists(x):
       print ctext(['red'],"!!! Error: package "+x+" doesn't exists.")
     else:
       print "Unpacking platform "+x+"..."
@@ -146,7 +146,7 @@ if "unpack" in myaction:
       cstdin, cstdout, cstderr = os.popen3(cmd)
       cstdin.close()
       errors = cstderr.readlines()
-      if errors: 
+      if errors:
 	for y in errors:
 	  print "-- "+y[5:],
 	print ctext(['red','blink'],"There are errors.")
@@ -191,7 +191,7 @@ elif "pack" in myaction:
 
 elif "list" in myaction:
   for x in dirlist:
-    if not os.path.exists("platforms/"+x+"/defs.arp"): 
+    if not os.path.exists("platforms/"+x+"/defs.arp"):
       print ctext(['red'],"!!! Error: platforms/"+x+"/defs.arp doesn't exists.")
     else:
       platname,platstruct = arp_utils.getdefstructure("platforms/"+x+"/defs.arp")
@@ -253,10 +253,8 @@ elif "delete" in myaction:
       cstderr.close()
       cstdout.close()
     print "Done."
-  
-
 
 elif "make" in myaction:
-  print "MAKE action recognized but not implemented yet."	  
+  print "MAKE action recognized but not implemented yet."
 elif "test" in myaction:
-  print "TEST action recognized but not implemented yet."	    
+  print "TEST action recognized but not implemented yet."

@@ -3,7 +3,7 @@
 # ####################################################
 
 TARGET=ac_tlm_mem
-INC_DIR := -I. -I$(ARCHC_PATH)/include/archc -I$(SYSTEMC)/include -I$(TLM_PATH) 
+INC_DIR := -I. -I$(ARCHC_PATH)/include/archc -I$(SYSTEMC)/include -I$(TLM_PATH)
 
 SRCS := ac_tlm_mem.cpp
 OBJS := $(SRCS:.cpp=.o)
