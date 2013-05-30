@@ -1,8 +1,7 @@
 //////////////////////////////////////////////////////////////////////////////
 
-#ifndef AC_TLM_ROUTER_H_
-#define AC_TLM_ROUTER_H_
-#define LOCK_ADDRESS 0x600000
+#ifndef AC_TLM_LOCK_H_
+#define AC_TLM_LOCK_H_
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -22,20 +21,16 @@ using tlm::tlm_transport_if;
 
 //#define DEBUG
 
-/// Namespace to isolate router from ArchC
+/// Namespace to isolate lock from ArchC
 namespace user
 {
 
-/// A TLM router
-class ac_tlm_router :
+/// A TLM lock
+class ac_tlm_lock :
   public sc_module,
   public ac_tlm_transport_if // Using ArchC TLM protocol
 {
 public:
-  /// Port to memory device
-  ac_tlm_port mem_port;
-  /// Port to lock device
-  ac_tlm_port lock_port;
   /// Exposed port with ArchC interface
   sc_export<ac_tlm_transport_if> target_export;
 
@@ -48,24 +43,39 @@ public:
    * @return a response packet to be sent
    */
   ac_tlm_rsp transport(const ac_tlm_req &request) {
-    if (request.addr != LOCK_ADDRESS) {
-      return mem_port->transport(request);
-    } else {
-      return lock_port->transport(request);
+    // Check whether processor is trying to acquire or release the lock
+    ac_tlm_rsp response;
+    switch (request.type) {
+      case READ: // Read (and maybe acquire) lock
+        response.status = read_lock(response.data);
+        break;
+      case WRITE: // Write (and maybe release) lock
+        response.status = write_lock(request.data);
+        break;
+      default:
+        response.status = ERROR;
+        break;
     }
+    return response;
   }
 
   /**
    * Default constructor.
    */
-  ac_tlm_router(sc_module_name module_name);
+  ac_tlm_lock(sc_module_name module_name);
 
   /**
    * Default destructor.
    */
-  ~ac_tlm_router();
+  ~ac_tlm_lock();
+
+private:
+  /// Lock - released on 0, taken otherwise
+  uint32_t lock;
+  ac_tlm_rsp_status read_lock(uint32_t &);
+  ac_tlm_rsp_status write_lock(const uint32_t &);
 };
 
 };
 
-#endif //AC_TLM_ROUTER_H_
+#endif //AC_TLM_LOCK_H_
