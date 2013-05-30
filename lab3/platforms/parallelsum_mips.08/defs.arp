@@ -1,0 +1,5 @@
+IP := ac_tlm_mem
+IS := ac_tlm_router
+PROCESSOR := mips1
+SW := parallel_sum
+WRAPPER := 

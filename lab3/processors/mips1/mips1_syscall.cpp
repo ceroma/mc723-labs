@@ -36,6 +36,9 @@
 #include "mips1_syscall.H"
 #include "ac_utils.H"
 
+#define STACK_SIZE (64 * 1024)
+static int proc_counter = 0;
+
 // 'using namespace' statement to allow access to all
 // mips1-specific datatypes
 using namespace mips1_parms;
@@ -92,7 +95,7 @@ void mips1_syscall::set_prog_args(int argc, char **argv)
   unsigned int ac_argv[30];
   char ac_argstr[512];
 
-  base = AC_RAM_END - 512;
+  base = AC_RAM_END - 512 - (proc_counter * STACK_SIZE);
   for (i=0, j=0; i<argc; i++) {
     int len = strlen(argv[i]) + 1;
     ac_argv[i] = base + j;
@@ -101,19 +104,21 @@ void mips1_syscall::set_prog_args(int argc, char **argv)
   }
 
   //Ajust %sp and write argument string
-  RB[29] = AC_RAM_END-512;
+  RB[29] = base;
   set_buffer(25, (unsigned char*) ac_argstr, 512);   //$25 = $29(sp) - 4 (set_buffer adds 4)
 
   //Ajust %sp and write string pointers
-  RB[29] = AC_RAM_END-512-120;
+  RB[29] = base - 120;
   set_buffer_noinvert(25, (unsigned char*) ac_argv, 120);
 
   //Set %sp
-  RB[29] = AC_RAM_END-512-128;
+  RB[29] = base - 128;
 
   //Set %o0 to the argument count
   RB[4] = argc;
 
   //Set %o1 to the string pointers
-  RB[5] = AC_RAM_END-512-120;
+  RB[5] = base - 120;
+
+  proc_counter++;
 }
