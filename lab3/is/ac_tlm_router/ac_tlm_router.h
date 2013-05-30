@@ -2,6 +2,7 @@
 
 #ifndef AC_TLM_ROUTER_H_
 #define AC_TLM_ROUTER_H_
+#define LOCK_ADDRESS 0x600000
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -43,9 +44,27 @@ public:
    *
    * @param request a received request packet
    * @return a response packet to be sent
-  */
+   */
   ac_tlm_rsp transport(const ac_tlm_req &request) {
-    return mem_port->transport(request);
+    // Normal memory access, just redirects to memory module
+    if (request.addr != LOCK_ADDRESS) {
+      return mem_port->transport(request);
+    }
+
+    // Check whether processor is trying to acquire or release the lock
+    ac_tlm_rsp response;
+    switch (request.type) {
+      case READ: // Read (and maybe acquire) lock
+        response.status = read_lock(response.data);
+        break;
+      case WRITE: // Write (and maybe release) lock
+        response.status = write_lock(request.data);
+        break;
+      default:
+        response.status = ERROR;
+        break;
+    }
+    return response;
   }
 
   /**
@@ -57,6 +76,12 @@ public:
    * Default destructor.
    */
   ~ac_tlm_router();
+
+private:
+  /// Lock - released on 0, taken otherwise
+  uint32_t lock;
+  ac_tlm_rsp_status read_lock(uint32_t &);
+  ac_tlm_rsp_status write_lock(const uint32_t &);
 };
 
 };
