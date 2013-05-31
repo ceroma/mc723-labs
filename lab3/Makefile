@@ -4,7 +4,7 @@
 # ####################################################
 
 # Variable that points to ArchC installation path
-PLATFORM := parallelsum_mips.08
+PLATFORM := imagefilter_mips.08
 
 # Variable that points to SystemC installation path
 export SYSTEMC :=  /home/staff/rodolfo/mc723/systemc

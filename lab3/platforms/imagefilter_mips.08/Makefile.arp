@@ -1,10 +1,10 @@
 # ####################################################
-# Parallel Sum Platform
+# Image Filter Platform
 # ####################################################
 
 include defs.arp
 
-TARGET=parallelsum_mips.08
+TARGET=imagefilter_mips.08
 EXE = $(TARGET).x
 
 SRCS := main.cpp
@@ -24,7 +24,7 @@ main.o:
 all: $(EXE)
 #------------------------------------------------------
 run: all
-	./$(EXE) --load=parallel_sum.x
+	./$(EXE) --load=image_filter.x
 #------------------------------------------------------
 clean:
 	rm -f $(OBJS) $(EXE) *~ *.o
