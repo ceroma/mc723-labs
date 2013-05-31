@@ -24,7 +24,7 @@ main.o:
 all: $(EXE)
 #------------------------------------------------------
 run: all
-	./$(EXE) --load=image_filter.x
+	./$(EXE) --load=image_filter.x $(INPUT) $(OUTPUT)
 #------------------------------------------------------
 clean:
 	rm -f $(OBJS) $(EXE) *~ *.o

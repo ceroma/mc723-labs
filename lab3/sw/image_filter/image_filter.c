@@ -8,16 +8,16 @@ volatile int proc_counter = 0;
 volatile int proc_finished = 0;
 
 volatile int input[MATRIX_SIZE][MATRIX_SIZE] = {
-  {1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
-  {2, 2, 2, 2, 2, 2, 2, 2, 2, 2},
-  {3, 3, 3, 3, 3, 3, 3, 3, 3, 3},
-  {4, 4, 4, 4, 4, 4, 4, 4, 4, 4},
-  {1, 2, 3, 4, 5, 6, 7, 8, 9, 0},
-  {0, 9, 8, 7, 6, 5, 4, 3, 2, 1},
-  {6, 6, 6, 6, 6, 6, 6, 6, 6, 6},
-  {7, 7, 7, 7, 7, 7, 7, 7, 7, 7},
-  {8, 8, 8, 8, 8, 8, 8, 8, 8, 8},
-  {9, 9, 9, 9, 9, 9, 9, 9, 9, 9},
+  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 };
 
 volatile int output[MATRIX_SIZE][MATRIX_SIZE] = {
@@ -33,6 +33,7 @@ volatile int output[MATRIX_SIZE][MATRIX_SIZE] = {
   {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 };
 
+volatile int arrived = 0, ready = 0;
 volatile int *lock_ptr = (volatile int *) 0x600000;
 
 /**
@@ -51,6 +52,26 @@ void release_lock() {
 }
 
 /**
+ * A simple synchronizing barrier. All process need to reach this point before
+ * all of them can resume execution.
+ */
+void synch() {
+  acquire_lock();
+  arrived++;
+  if (arrived == NUM_PROC) ready = 0;
+  release_lock();
+
+  while (arrived < NUM_PROC);
+
+  acquire_lock();
+  ready++;
+  if (ready == NUM_PROC) arrived = 0;
+  release_lock();
+
+  while (ready < NUM_PROC);
+}
+
+/**
  * Apply the mean filter on a 3x3 window.
  */
 int mean_filter(int tl, int tc, int tr,
@@ -60,21 +81,46 @@ int mean_filter(int tl, int tc, int tr,
 }
 
 /**
- * Print the output matrix.
+ * Write the result matrix to file.
  */
-void print_output() {
+void write_output(const char *file) {
   int i, j;
+  FILE *fp = fopen(file, "w");
 
   for (i = 0; i < MATRIX_SIZE; i++) {
     for (j = 0; j < MATRIX_SIZE; j++) {
-      printf("%d\t", output[i][j]);
+      fprintf(fp, "%d ", output[i][j]);
     }
-    printf("\n");
+    fprintf(fp, "\n");
   }
+
+  fclose(fp);
+}
+
+/**
+ * Read a 10x10 matrix from file.
+ */
+void read_input(const char *file) {
+  int i, j;
+  FILE *fp = fopen(file, "r");
+
+  for (i = 0; i < MATRIX_SIZE; i++) {
+    for (j = 0; j < MATRIX_SIZE; j++) {
+      fscanf(fp, "%d", &input[i][j]);
+    }
+  }
+
+  fclose(fp);
 }
 
 int main(int argc, char *argv[]){
   int j, pn;
+
+  // Sanitize arguments
+  if (argc < 3) {
+    printf("Usage: ./image_filter input_file output_file\n");
+    exit(0);
+  }
 
   // Get process number for running process
   acquire_lock();
@@ -82,6 +128,14 @@ int main(int argc, char *argv[]){
   proc_counter++;
   release_lock();
 
+  // p0 will read the input file
+  if (pn == 0) {
+    read_input(argv[1]);
+  }
+
+  // Make sure input was read before cores start working
+  synch();
+  
   // Each core will apply the filter to one row
   for (j = 1; j < MATRIX_SIZE - 1; j++) {
     output[pn+1][j] = mean_filter(
@@ -98,7 +152,9 @@ int main(int argc, char *argv[]){
 
   // p0 will wait for everyone and print the result
   while (pn == 0 && proc_finished < NUM_PROC);
-  if (pn == 0) print_output();
+  if (pn == 0) {
+    write_output(argv[2]);
+  }
 
   exit(0); // To avoid cross-compiler exit routine
   return 0; // Never executed, just for compatibility
