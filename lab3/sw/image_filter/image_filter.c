@@ -13,47 +13,10 @@
 #define FILTER_RESULT_ADDRESS 0x700024
 
 #define NUM_PROC 8
-#define MATRIX_SIZE 15
 #define MIN(a, b) (a < b ? a : b)
 
+volatile int proc_order = 0;
 volatile int proc_counter = 0;
-volatile int proc_finished = 0;
-
-volatile int input[MATRIX_SIZE][MATRIX_SIZE] = {
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-};
-
-volatile int output[MATRIX_SIZE][MATRIX_SIZE] = {
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-};
 
 volatile int arrived = 0, ready = 0;
 volatile int *lock_ptr = (volatile int *) 0x600000;
@@ -133,15 +96,53 @@ int mean_filter(int tl, int tc, int tr,
 }
 
 /**
- * Write the result matrix to file.
+ * Utility function to map matrix indexes to a flat arary.
+ *
+ * @param row the row index in matrix[row][column]
+ * @param column the column index in matrix[row][column]
+ * @param C the total number of columns
  */
-void write_output(const char *file) {
-  int i, j;
-  FILE *fp = fopen(file, "w");
+int map(int row, int column, int C) {
+  return row * C + column;
+}
 
-  for (i = 0; i < MATRIX_SIZE; i++) {
-    for (j = 0; j < MATRIX_SIZE; j++) {
-      fprintf(fp, "%d ", output[i][j]);
+/**
+ * Write the result matrix to file.
+ *
+ * @param file name of the file to write to
+ * @param pn identifier of the running core
+ * @param output matrix that will be written to file
+ * @param r number of rows in the output matrix
+ * @param R number of rows in the original input matrix
+ * @param C number of columns in the original input matrix
+ */
+void write_output(char *file, int pn, int *output, int r, int R, int C) {
+  int i, j;
+  FILE *fp;
+
+  // First core writes size and a row of zeros
+  if (pn == 0) {
+    fp = fopen(file, "w");
+    fprintf(fp, "%d %d\n", R, C);
+    for (i = 0; i < C; i++) {
+      fprintf(fp, "0 ");
+    }
+    fprintf(fp, "\n");
+  } else {
+    fp = fopen(file, "a");
+  }
+
+  for (i = 0; i < r; i++) {
+    for (j = 0; j < C; j++) {
+      fprintf(fp, "%d ", output[map(i, j, C)]);
+    }
+    fprintf(fp, "\n");
+  }
+
+  // Last core writes a row of zeros
+  if (pn == NUM_PROC - 1) {
+    for (i = 0; i < C; i++) {
+      fprintf(fp, "0 ");
     }
     fprintf(fp, "\n");
   }
@@ -150,15 +151,42 @@ void write_output(const char *file) {
 }
 
 /**
- * Read a 10x10 matrix from file.
+ * Read r+2 rows of a RxC matrix from file. The number r is the ammount of rows
+ * this core will produce, but since an output row i also depends on rows i-1
+ * and i+1 of the input matrix, r+2 rows are read.
+ *
+ * @param file name of the file to read the input from
+ * @param pn identifier of the running core
+ * @param input will have the values of the (r+2)xC matrix read from file
+ * @param r will be set to the number of rows this core will work on
+ * @param R will be set to the number of rows in the original input matrix
+ * @param C will be set to the number of columns in the original input matrix
  */
-void read_input(const char *file) {
-  int i, j;
+void read_input(char *file, int pn, int **input, int *r, int *R, int *C) {
+  int i, j, k, first_row;
   FILE *fp = fopen(file, "r");
 
-  for (i = 0; i < MATRIX_SIZE; i++) {
-    for (j = 0; j < MATRIX_SIZE; j++) {
-      fscanf(fp, "%d", &input[i][j]);
+  // Read matrix size
+  fscanf(fp, "%d %d", R, C);
+  
+  // Calculate matrix offset for this core
+  *r = (*R - 2) / NUM_PROC;
+  *r += ((*R - 2) % NUM_PROC > pn) ? 1 : 0;
+  first_row = 1 + pn * ((*R - 2) / NUM_PROC);
+  first_row += MIN(pn, (*R - 2) % NUM_PROC);
+
+  // Go to right offset in file
+  for (i = 0; i < first_row - 1; i++) {
+    for (j = 0; j < *C; j++) {
+      fscanf(fp, "%d", &k);
+    }
+  }
+
+  // Read input for this core
+  *input = (int *)malloc((*r + 2) * (*C) * sizeof(int));
+  for (i = 0; i < (*r + 2); i++) {
+    for (j = 0; j < *C; j++) {
+      fscanf(fp, "%d", *input + map(i, j, *C));
     }
   }
 
@@ -166,8 +194,8 @@ void read_input(const char *file) {
 }
 
 int main(int argc, char *argv[]){
-  int j, pn;
-  int i, i_max, num_lines;
+  int pn, i, j;
+  int r, R, C, *input, *output;
 
   // Sanitize arguments
   if (argc < 3) {
@@ -175,50 +203,45 @@ int main(int argc, char *argv[]){
     exit(0);
   }
 
-  // Get process number for running process
+  // Get process number for running process and read input
   acquire_lock();
   pn = proc_counter;
   proc_counter++;
+  read_input(argv[1], pn, &input, &r, &R, &C);
   release_lock();
 
-  // p0 will read the input file
-  if (pn == 0) {
-    read_input(argv[1]);
-  }
-
-  // Make sure input was read before cores start working
-  synch();
-  
-  // Calculate matrix offset for this core
-  num_lines = (MATRIX_SIZE - 2) / NUM_PROC;
-  num_lines += ((MATRIX_SIZE - 2) % NUM_PROC > pn) ? 1 : 0;
-  i = 1 + pn * ((MATRIX_SIZE - 2) / NUM_PROC);
-  i += MIN(pn, (MATRIX_SIZE - 2) % NUM_PROC);
-  i_max = i + num_lines;
-
-  // Each core will apply the filter to one row
-  for (i = i; i < i_max; i++) {
-    for (j = 1; j < MATRIX_SIZE - 1; j++) {
+  // Each core will apply the filter to a subset of rows
+  output = (int *)malloc(r * C * sizeof(int));
+  memset(output, 0, r * C * sizeof(int));
+  for (i = 1; i <= r; i++) {
+    for (j = 1; j < C - 1; j++) {
       acquire_lock();
-      output[i][j] = mean_filter(
-        input[i-1][j-1], input[i-1][j], input[i-1][j+1],
-        input[i  ][j-1], input[i  ][j], input[i  ][j+1],
-        input[i+1][j-1], input[i+1][j], input[i+1][j+1]
+      output[map(i-1, j, C)] = mean_filter(
+        input[map(i-1, j-1, C)], input[map(i-1, j, C)], input[map(i-1, j+1, C)],
+        input[map(i  , j-1, C)], input[map(i  , j, C)], input[map(i  , j+1, C)],
+        input[map(i+1, j-1, C)], input[map(i+1, j, C)], input[map(i+1, j+1, C)]
       );
       release_lock();
     }
   }
 
-  // Mark core has finished its work
+  // Wait to write output in the correct order
+  while (1) {
+    acquire_lock();
+    i = proc_order;
+    release_lock();
+    if (i == pn) break;
+  }
+
+  // Write output and mark that core has finished
+  write_output(argv[2], pn, output, r, R, C);
   acquire_lock();
-  proc_finished++;
+  proc_order++;
   release_lock();
 
-  // p0 will wait for everyone and print the result
-  while (pn == 0 && proc_finished < NUM_PROC);
-  if (pn == 0) {
-    write_output(argv[2]);
-  }
+  // Free, free, free!
+  free(input);
+  free(output);
 
   exit(0); // To avoid cross-compiler exit routine
   return 0; // Never executed, just for compatibility
