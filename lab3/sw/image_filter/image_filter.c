@@ -1,6 +1,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define FILTER_TL_ADDRESS 0x700000
+#define FILTER_TC_ADDRESS 0x700004
+#define FILTER_TR_ADDRESS 0x700008
+#define FILTER_ML_ADDRESS 0x70000C
+#define FILTER_MC_ADDRESS 0x700010
+#define FILTER_MR_ADDRESS 0x700014
+#define FILTER_BL_ADDRESS 0x700018
+#define FILTER_BC_ADDRESS 0x70001C
+#define FILTER_BR_ADDRESS 0x700020
+#define FILTER_RESULT_ADDRESS 0x700024
+
 #define NUM_PROC 8
 #define MATRIX_SIZE 15
 #define MIN(a, b) (a < b ? a : b)
@@ -88,7 +99,37 @@ void synch() {
 int mean_filter(int tl, int tc, int tr,
                 int ml, int mc, int mr,
                 int bl, int bc, int br) {
-  return (tl + tc + tr + ml + mc + mr + bl + bc + br) / 9;
+  int *filter_address;
+
+  filter_address = (int *) FILTER_TL_ADDRESS;
+  *filter_address = tl;
+
+  filter_address = (int *) FILTER_TC_ADDRESS;
+  *filter_address = tc;
+
+  filter_address = (int *) FILTER_TR_ADDRESS;
+  *filter_address = tr;
+
+  filter_address = (int *) FILTER_ML_ADDRESS;
+  *filter_address = ml;
+
+  filter_address = (int *) FILTER_MC_ADDRESS;
+  *filter_address = mc;
+
+  filter_address = (int *) FILTER_MR_ADDRESS;
+  *filter_address = mr;
+
+  filter_address = (int *) FILTER_BL_ADDRESS;
+  *filter_address = bl;
+
+  filter_address = (int *) FILTER_BC_ADDRESS;
+  *filter_address = bc;
+
+  filter_address = (int *) FILTER_BR_ADDRESS;
+  *filter_address = br;
+
+  filter_address = (int *) FILTER_RESULT_ADDRESS;
+  return *filter_address;
 }
 
 /**
@@ -158,11 +199,13 @@ int main(int argc, char *argv[]){
   // Each core will apply the filter to one row
   for (i = i; i < i_max; i++) {
     for (j = 1; j < MATRIX_SIZE - 1; j++) {
+      acquire_lock();
       output[i][j] = mean_filter(
         input[i-1][j-1], input[i-1][j], input[i-1][j+1],
         input[i  ][j-1], input[i  ][j], input[i  ][j+1],
         input[i+1][j-1], input[i+1][j], input[i+1][j+1]
       );
+      release_lock();
     }
   }
 

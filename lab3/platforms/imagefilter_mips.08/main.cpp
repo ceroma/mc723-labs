@@ -7,12 +7,14 @@ const char *archc_options="-abi -dy ";
 #include  "mips1.H"
 #include  "ac_tlm_mem.h"
 #include  "ac_tlm_lock.h"
+#include  "ac_tlm_filter.h"
 #include  "ac_tlm_router.h"
 
 #define NUM_PROC 8
 
 using user::ac_tlm_mem;
 using user::ac_tlm_lock;
+using user::ac_tlm_filter;
 using user::ac_tlm_router;
 
 int sc_main(int ac, char *av[])
@@ -27,6 +29,7 @@ int sc_main(int ac, char *av[])
   }
   ac_tlm_mem mem("mem");
   ac_tlm_lock lock("lock");
+  ac_tlm_filter filter("filter");
   ac_tlm_router router("router");
 
 #ifdef AC_DEBUG
@@ -39,6 +42,7 @@ int sc_main(int ac, char *av[])
   }
   router.mem_port(mem.target_export);
   router.lock_port(lock.target_export);
+  router.filter_port(filter.target_export);
 
   // Replicate arguments
   char **argvs[NUM_PROC];

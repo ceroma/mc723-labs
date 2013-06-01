@@ -1,10 +1,7 @@
 //////////////////////////////////////////////////////////////////////////////
 
-#ifndef AC_TLM_ROUTER_H_
-#define AC_TLM_ROUTER_H_
-#define LOCK_ADDRESS 0x600000
-#define FILTER_ADDRESS 0x700000
-#define FILTER_END_ADDRESS 0x700024
+#ifndef AC_TLM_FILTER_H_
+#define AC_TLM_FILTER_H_
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -12,7 +9,6 @@
 // SystemC includes
 #include <systemc>
 // ArchC includes
-#include "ac_tlm_port.H"
 #include "ac_tlm_protocol.H"
 
 //////////////////////////////////////////////////////////////////////////////
@@ -22,24 +18,30 @@ using tlm::tlm_transport_if;
 
 //////////////////////////////////////////////////////////////////////////////
 
+#define FILTER_ADDRESS 0x700000
+#define INDEX_TL 0x00
+#define INDEX_TC 0x04
+#define INDEX_TR 0x08
+#define INDEX_ML 0x0C
+#define INDEX_MC 0x10
+#define INDEX_MR 0x14
+#define INDEX_BL 0x18
+#define INDEX_BC 0x1C
+#define INDEX_BR 0x20
+#define INDEX_RESULT 0x24
+
 //#define DEBUG
 
-/// Namespace to isolate router from ArchC
+/// Namespace to isolate filter from ArchC
 namespace user
 {
 
-/// A TLM router
-class ac_tlm_router :
+/// A TLM filter
+class ac_tlm_filter :
   public sc_module,
   public ac_tlm_transport_if // Using ArchC TLM protocol
 {
 public:
-  /// Port to memory device
-  ac_tlm_port mem_port;
-  /// Port to lock device
-  ac_tlm_port lock_port;
-  /// Port to filter device
-  ac_tlm_port filter_port;
   /// Exposed port with ArchC interface
   sc_export<ac_tlm_transport_if> target_export;
 
@@ -52,26 +54,38 @@ public:
    * @return a response packet to be sent
    */
   ac_tlm_rsp transport(const ac_tlm_req &request) {
-    if (request.addr >= FILTER_ADDRESS && request.addr <= FILTER_END_ADDRESS) {
-      return filter_port->transport(request);
-    } else if (request.addr == LOCK_ADDRESS) {
-      return lock_port->transport(request);
-    } else {
-      return mem_port->transport(request);
+    ac_tlm_rsp response;
+    switch (request.type) {
+      case READ: // Read and calculate result
+        response.status = readm(request.addr, response.data);
+        break;
+      case WRITE: // Write input param
+	response.status = writem(request.addr, request.data);
+        break;
+      default:
+        response.status = ERROR;
+        break;
     }
+    return response;
   }
 
   /**
    * Default constructor.
    */
-  ac_tlm_router(sc_module_name module_name);
+  ac_tlm_filter(sc_module_name module_name);
 
   /**
    * Default destructor.
    */
-  ~ac_tlm_router();
+  ~ac_tlm_filter();
+
+private:
+  uint8_t *memory;
+  ac_tlm_rsp_status readm(const uint32_t &, uint32_t &);
+  ac_tlm_rsp_status writem(const uint32_t &, const uint32_t &);
+  int mean_filter(int, int, int, int, int, int, int, int, int);
 };
 
 };
 
-#endif //AC_TLM_ROUTER_H_
+#endif //AC_TLM_FILTER_H_
