@@ -16,7 +16,7 @@ ac_tlm_router::ac_tlm_router(sc_module_name module_name)
   , target_export("iport")
   , mem_port("mem_port", 5242880U)
   , lock_port("lock_port", 4U)
-  , filter_port("lock_port", 40U)
+  , filter_port("lock_port", 44U)
 {
     /// Binds target_export to the router
     target_export(*this);

@@ -4,7 +4,7 @@
 #define AC_TLM_ROUTER_H_
 #define LOCK_ADDRESS 0x600000
 #define FILTER_ADDRESS 0x700000
-#define FILTER_END_ADDRESS 0x700024
+#define FILTER_END_ADDRESS 0x700028
 
 //////////////////////////////////////////////////////////////////////////////
 

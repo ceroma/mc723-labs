@@ -10,7 +10,11 @@
 #define FILTER_BL_ADDRESS 0x700018
 #define FILTER_BC_ADDRESS 0x70001C
 #define FILTER_BR_ADDRESS 0x700020
-#define FILTER_RESULT_ADDRESS 0x700024
+#define FILTER_TYPE_ADDRESS 0x700024
+#define FILTER_RESULT_ADDRESS 0x700028
+
+#define FILTER_TYPE_MEAN  0
+#define FILTER_TYPE_SOBEL 1
 
 #define NUM_PROC 8
 #define NUM_MALLOC_RETRIES 30
@@ -58,11 +62,12 @@ void synch() {
 }
 
 /**
- * Apply the mean filter on a 3x3 window.
+ * Apply the selected filter on a 3x3 window.
  */
-int mean_filter(int tl, int tc, int tr,
-                int ml, int mc, int mr,
-                int bl, int bc, int br) {
+int apply_filter(int type,
+                 int tl, int tc, int tr,
+                 int ml, int mc, int mr,
+                 int bl, int bc, int br) {
   int *filter_address;
 
   filter_address = (int *) FILTER_TL_ADDRESS;
@@ -92,8 +97,29 @@ int mean_filter(int tl, int tc, int tr,
   filter_address = (int *) FILTER_BR_ADDRESS;
   *filter_address = br;
 
+  filter_address = (int *) FILTER_TYPE_ADDRESS;
+  *filter_address = type;
+
   filter_address = (int *) FILTER_RESULT_ADDRESS;
   return *filter_address;
+}
+
+/**
+ * Apply the mean filter on a 3x3 window.
+ */
+int mean_filter(int tl, int tc, int tr,
+                int ml, int mc, int mr,
+                int bl, int bc, int br) {
+  return apply_filter(FILTER_TYPE_MEAN, tl, tc, tr, ml, mc, mr, bl, bc, br);
+}
+
+/**
+ * Apply the sobel filter on a 3x3 window.
+ */
+int sobel_filter(int tl, int tc, int tr,
+                int ml, int mc, int mr,
+                int bl, int bc, int br) {
+  return apply_filter(FILTER_TYPE_SOBEL, tl, tc, tr, ml, mc, mr, bl, bc, br);
 }
 
 /**
@@ -240,7 +266,7 @@ int main(int argc, char *argv[]){
   for (i = 1; i <= r; i++) {
     for (j = 1; j < C - 1; j++) {
       acquire_lock();
-      output[map(i-1, j, C)] = mean_filter(
+      output[map(i-1, j, C)] = sobel_filter(
         input[map(i-1, j-1, C)], input[map(i-1, j, C)], input[map(i-1, j+1, C)],
         input[map(i  , j-1, C)], input[map(i  , j, C)], input[map(i  , j+1, C)],
         input[map(i+1, j-1, C)], input[map(i+1, j, C)], input[map(i+1, j+1, C)]

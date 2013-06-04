@@ -28,7 +28,11 @@ using tlm::tlm_transport_if;
 #define INDEX_BL 0x18
 #define INDEX_BC 0x1C
 #define INDEX_BR 0x20
-#define INDEX_RESULT 0x24
+#define INDEX_TYPE 0x24
+#define INDEX_RESULT 0x28
+
+#define TYPE_MEAN  0
+#define TYPE_SOBEL 1
 
 //#define DEBUG
 
@@ -84,6 +88,7 @@ private:
   ac_tlm_rsp_status readm(const uint32_t &, uint32_t &);
   ac_tlm_rsp_status writem(const uint32_t &, const uint32_t &);
   int mean_filter(int, int, int, int, int, int, int, int, int);
+  int sobel_filter(int, int, int, int, int, int, int, int, int);
 };
 
 };
