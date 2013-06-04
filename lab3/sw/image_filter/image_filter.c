@@ -13,6 +13,7 @@
 #define FILTER_RESULT_ADDRESS 0x700024
 
 #define NUM_PROC 8
+#define NUM_MALLOC_RETRIES 30
 #define MIN(a, b) (a < b ? a : b)
 
 volatile int proc_order = 0;
@@ -107,6 +108,27 @@ int map(int row, int column, int C) {
 }
 
 /**
+ * Utility function to retry malloc a few times in case of failure.
+ *
+ * @param size the number of integer positions needed
+ */
+int *try_malloc(int size) {
+  int retries = 0;
+  int *mem = NULL;
+
+  while (!mem && retries++ < NUM_MALLOC_RETRIES) {
+    mem = (int *)malloc(size * sizeof(int));
+  }
+
+  if (!mem) {
+    printf("Error: couldn't allocate enough memory!\n");
+    exit(1);
+  }
+
+  return mem;
+}
+
+/**
  * Write the result matrix to file.
  *
  * @param file name of the file to write to
@@ -183,7 +205,7 @@ void read_input(char *file, int pn, int **input, int *r, int *R, int *C) {
   }
 
   // Read input for this core
-  *input = (int *)malloc((*r + 2) * (*C) * sizeof(int));
+  *input = try_malloc((*r + 2) * (*C));
   for (i = 0; i < (*r + 2); i++) {
     for (j = 0; j < *C; j++) {
       fscanf(fp, "%d", *input + map(i, j, *C));
@@ -211,8 +233,10 @@ int main(int argc, char *argv[]){
   release_lock();
 
   // Each core will apply the filter to a subset of rows
-  output = (int *)malloc(r * C * sizeof(int));
+  acquire_lock();
+  output = try_malloc(r * C);
   memset(output, 0, r * C * sizeof(int));
+  release_lock();
   for (i = 1; i <= r; i++) {
     for (j = 1; j < C - 1; j++) {
       acquire_lock();
