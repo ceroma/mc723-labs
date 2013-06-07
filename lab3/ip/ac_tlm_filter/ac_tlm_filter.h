@@ -18,7 +18,8 @@ using tlm::tlm_transport_if;
 
 //////////////////////////////////////////////////////////////////////////////
 
-#define FILTER_ADDRESS 0x700000
+#define FILTER_ADDRESS  0x700000
+#define FILTER_ADDRESS_OFFSET 44
 #define INDEX_TL 0x00
 #define INDEX_TC 0x04
 #define INDEX_TR 0x08
@@ -76,7 +77,7 @@ public:
   /**
    * Default constructor.
    */
-  ac_tlm_filter(sc_module_name module_name);
+  ac_tlm_filter(sc_module_name module_name, int filter_num);
 
   /**
    * Default destructor.
@@ -85,6 +86,7 @@ public:
 
 private:
   uint8_t *memory;
+  int filter_number;
   ac_tlm_rsp_status readm(const uint32_t &, uint32_t &);
   ac_tlm_rsp_status writem(const uint32_t &, const uint32_t &);
   int mean_filter(int, int, int, int, int, int, int, int, int);

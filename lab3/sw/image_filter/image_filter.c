@@ -1,20 +1,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define FILTER_TL_ADDRESS 0x700000
-#define FILTER_TC_ADDRESS 0x700004
-#define FILTER_TR_ADDRESS 0x700008
-#define FILTER_ML_ADDRESS 0x70000C
-#define FILTER_MC_ADDRESS 0x700010
-#define FILTER_MR_ADDRESS 0x700014
-#define FILTER_BL_ADDRESS 0x700018
-#define FILTER_BC_ADDRESS 0x70001C
-#define FILTER_BR_ADDRESS 0x700020
-#define FILTER_TYPE_ADDRESS 0x700024
-#define FILTER_RESULT_ADDRESS 0x700028
+#define FILTER_ADDRESS  0x700000
+#define FILTER_ADDRESS_OFFSET 44
+#define FILTER_INDEX_TL 0x00
+#define FILTER_INDEX_TC 0x04
+#define FILTER_INDEX_TR 0x08
+#define FILTER_INDEX_ML 0x0C
+#define FILTER_INDEX_MC 0x10
+#define FILTER_INDEX_MR 0x14
+#define FILTER_INDEX_BL 0x18
+#define FILTER_INDEX_BC 0x1C
+#define FILTER_INDEX_BR 0x20
+#define FILTER_INDEX_TYPE 0x24
+#define FILTER_INDEX_RESULT 0x28
 
 #define FILTER_TYPE_MEAN  0
 #define FILTER_TYPE_SOBEL 1
+
+#define TAKEN 0
+#define AVAILABLE 1
+#define NUM_FILTERS 4
 
 #define NUM_PROC 8
 #define NUM_MALLOC_RETRIES 30
@@ -25,6 +31,8 @@ volatile int proc_counter = 0;
 
 volatile int arrived = 0, ready = 0;
 volatile int *lock_ptr = (volatile int *) 0x600000;
+
+volatile int filters[NUM_FILTERS] = {AVAILABLE, AVAILABLE, AVAILABLE, AVAILABLE};
 
 /**
  * Acquire the lock by reading the lock's address. The read will return 0 if the
@@ -62,64 +70,100 @@ void synch() {
 }
 
 /**
+ * Acquire one of the available filters.
+ *
+ * @return the number of the granted filter
+ */
+int acquire_filter() {
+  int i, filter_number = -1;
+
+  while (filter_number == -1) {
+    for (i = 0; filter_number == -1 && i < NUM_FILTERS; i++) {
+      acquire_lock();
+      if (filters[i] == AVAILABLE) {
+        filters[i] = TAKEN;
+        filter_number = i;
+      }
+      release_lock();
+    }
+  }
+
+  return filter_number;
+}
+
+/**
+ * Release the filter.
+ *
+ * @param filter_number the filter to be released
+ */
+void release_filter(int filter_number) {
+  acquire_lock();
+  filters[filter_number] = AVAILABLE;
+  release_lock();
+}
+
+/**
  * Apply the selected filter on a 3x3 window.
  */
-int apply_filter(int type,
+int apply_filter(int type, int filter_number,
                  int tl, int tc, int tr,
                  int ml, int mc, int mr,
                  int bl, int bc, int br) {
   int *filter_address;
+  int base = FILTER_ADDRESS + filter_number * FILTER_ADDRESS_OFFSET;
 
-  filter_address = (int *) FILTER_TL_ADDRESS;
+  filter_address = (int *)(base + FILTER_INDEX_TL);
   *filter_address = tl;
 
-  filter_address = (int *) FILTER_TC_ADDRESS;
+  filter_address = (int *)(base + FILTER_INDEX_TC);
   *filter_address = tc;
 
-  filter_address = (int *) FILTER_TR_ADDRESS;
+  filter_address = (int *)(base + FILTER_INDEX_TR);
   *filter_address = tr;
 
-  filter_address = (int *) FILTER_ML_ADDRESS;
+  filter_address = (int *)(base + FILTER_INDEX_ML);
   *filter_address = ml;
 
-  filter_address = (int *) FILTER_MC_ADDRESS;
+  filter_address = (int *)(base + FILTER_INDEX_MC);
   *filter_address = mc;
 
-  filter_address = (int *) FILTER_MR_ADDRESS;
+  filter_address = (int *)(base + FILTER_INDEX_MR);
   *filter_address = mr;
 
-  filter_address = (int *) FILTER_BL_ADDRESS;
+  filter_address = (int *)(base + FILTER_INDEX_BL);
   *filter_address = bl;
 
-  filter_address = (int *) FILTER_BC_ADDRESS;
+  filter_address = (int *)(base + FILTER_INDEX_BC);
   *filter_address = bc;
 
-  filter_address = (int *) FILTER_BR_ADDRESS;
+  filter_address = (int *)(base + FILTER_INDEX_BR);
   *filter_address = br;
 
-  filter_address = (int *) FILTER_TYPE_ADDRESS;
+  filter_address = (int *)(base + FILTER_INDEX_TYPE);
   *filter_address = type;
 
-  filter_address = (int *) FILTER_RESULT_ADDRESS;
+  filter_address = (int *)(base + FILTER_INDEX_RESULT);
   return *filter_address;
 }
 
 /**
  * Apply the mean filter on a 3x3 window.
  */
-int mean_filter(int tl, int tc, int tr,
+int mean_filter(int fn,
+                int tl, int tc, int tr,
                 int ml, int mc, int mr,
                 int bl, int bc, int br) {
-  return apply_filter(FILTER_TYPE_MEAN, tl, tc, tr, ml, mc, mr, bl, bc, br);
+  return apply_filter(FILTER_TYPE_MEAN, fn, tl, tc, tr, ml, mc, mr, bl, bc, br);
 }
 
 /**
  * Apply the sobel filter on a 3x3 window.
  */
-int sobel_filter(int tl, int tc, int tr,
-                int ml, int mc, int mr,
-                int bl, int bc, int br) {
-  return apply_filter(FILTER_TYPE_SOBEL, tl, tc, tr, ml, mc, mr, bl, bc, br);
+int sobel_filter(int fn,
+                 int tl, int tc, int tr,
+                 int ml, int mc, int mr,
+                 int bl, int bc, int br) {
+  return apply_filter(FILTER_TYPE_SOBEL, fn, tl, tc, tr, ml, mc, mr, bl, bc, br);
 }
 
 /**
@@ -242,7 +286,7 @@ void read_input(char *file, int pn, int **input, int *r, int *R, int *C) {
 }
 
 int main(int argc, char *argv[]){
-  int pn, i, j;
+  int pn, i, j, filter_number;
   int r, R, C, *input, *output;
 
   // Sanitize arguments
@@ -265,13 +309,14 @@ int main(int argc, char *argv[]){
   release_lock();
   for (i = 1; i <= r; i++) {
     for (j = 1; j < C - 1; j++) {
-      acquire_lock();
+      filter_number = acquire_filter();
       output[map(i-1, j, C)] = sobel_filter(
+        filter_number,
         input[map(i-1, j-1, C)], input[map(i-1, j, C)], input[map(i-1, j+1, C)],
         input[map(i  , j-1, C)], input[map(i  , j, C)], input[map(i  , j+1, C)],
         input[map(i+1, j-1, C)], input[map(i+1, j, C)], input[map(i+1, j+1, C)]
       );
-      release_lock();
+      release_filter(filter_number);
     }
   }
 

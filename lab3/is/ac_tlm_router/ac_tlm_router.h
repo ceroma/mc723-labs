@@ -2,9 +2,6 @@
 
 #ifndef AC_TLM_ROUTER_H_
 #define AC_TLM_ROUTER_H_
-#define LOCK_ADDRESS 0x600000
-#define FILTER_ADDRESS 0x700000
-#define FILTER_END_ADDRESS 0x700028
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -22,6 +19,11 @@ using tlm::tlm_transport_if;
 
 //////////////////////////////////////////////////////////////////////////////
 
+#define NUM_FILTERS 4
+#define LOCK_ADDRESS 0x600000
+#define FILTER_ADDRESS 0x700000
+#define FILTER_ADDRESS_OFFSET 44
+
 //#define DEBUG
 
 /// Namespace to isolate router from ArchC
@@ -38,8 +40,9 @@ public:
   ac_tlm_port mem_port;
   /// Port to lock device
   ac_tlm_port lock_port;
-  /// Port to filter device
-  ac_tlm_port filter_port;
+  /// Ports to filter device
+  ac_tlm_port *filter_ports[NUM_FILTERS];
+
   /// Exposed port with ArchC interface
   sc_export<ac_tlm_transport_if> target_export;
 
@@ -52,9 +55,13 @@ public:
    * @return a response packet to be sent
    */
   ac_tlm_rsp transport(const ac_tlm_req &request) {
-    if (request.addr >= FILTER_ADDRESS && request.addr <= FILTER_END_ADDRESS) {
-      return filter_port->transport(request);
-    } else if (request.addr == LOCK_ADDRESS) {
+    for (int i = 0; i < NUM_FILTERS; i++) {
+      if (request.addr >= FILTER_ADDRESS + i * FILTER_ADDRESS_OFFSET &&
+          request.addr <  FILTER_ADDRESS + (i + 1) * FILTER_ADDRESS_OFFSET) {
+        return (*filter_ports[i])->transport(request);
+      }
+    }
+    if (request.addr == LOCK_ADDRESS) {
       return lock_port->transport(request);
     } else {
       return mem_port->transport(request);

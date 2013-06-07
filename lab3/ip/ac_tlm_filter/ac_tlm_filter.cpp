@@ -13,9 +13,10 @@
 using user::ac_tlm_filter;
 
 /// Constructor
-ac_tlm_filter::ac_tlm_filter(sc_module_name module_name)
+ac_tlm_filter::ac_tlm_filter(sc_module_name module_name, int filter_num)
   : sc_module(module_name) 
   , target_export("iport")
+  , filter_number(filter_num)
 {
     int k;
 
@@ -42,8 +43,8 @@ ac_tlm_filter::~ac_tlm_filter()
  */
 ac_tlm_rsp_status ac_tlm_filter::readm(const uint32_t &a, uint32_t &d)
 {
-  uint32_t index = a - FILTER_ADDRESS;
   int *result, *type, *tl, *tc, *tr, *ml, *mc, *mr, *bl, *bc, *br;
+  uint32_t index = a - FILTER_ADDRESS - filter_number * FILTER_ADDRESS_OFFSET;
 
   // Apply filter
   if (index == INDEX_RESULT) {
@@ -84,7 +85,7 @@ ac_tlm_rsp_status ac_tlm_filter::readm(const uint32_t &a, uint32_t &d)
  */
 ac_tlm_rsp_status ac_tlm_filter::writem(const uint32_t &a, const uint32_t &d)
 {
-  uint32_t index = a - FILTER_ADDRESS;
+  uint32_t index = a - FILTER_ADDRESS - filter_number * FILTER_ADDRESS_OFFSET;
 
   // Flip endianness
   memory[index]   = ((uint8_t *) &d)[3];

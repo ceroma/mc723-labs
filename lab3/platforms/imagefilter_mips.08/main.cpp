@@ -11,6 +11,7 @@ const char *archc_options="-abi -dy ";
 #include  "ac_tlm_router.h"
 
 #define NUM_PROC 8
+#define NUM_FILTERS 4
 
 using user::ac_tlm_mem;
 using user::ac_tlm_lock;
@@ -27,9 +28,14 @@ int sc_main(int ac, char *av[])
     sprintf(names[i], "mips1_%d", i);
     processors[i] = new mips1(names[i]);
   }
+  char filter_names[NUM_FILTERS][10];
+  ac_tlm_filter *filters[NUM_FILTERS];
+  for (int i = 0; i < NUM_FILTERS; i++) {
+    sprintf(filter_names[i], "filter_%d", i);
+    filters[i] = new ac_tlm_filter(filter_names[i], i);
+  }
   ac_tlm_mem mem("mem");
   ac_tlm_lock lock("lock");
-  ac_tlm_filter filter("filter");
   ac_tlm_router router("router");
 
 #ifdef AC_DEBUG
@@ -40,9 +46,11 @@ int sc_main(int ac, char *av[])
   for (int i = 0; i < NUM_PROC; i++) {
     processors[i]->DM_port(router.target_export);
   }
+  for (int i = 0; i < NUM_FILTERS; i++) {
+    (*router.filter_ports[i])(filters[i]->target_export);
+  }
   router.mem_port(mem.target_export);
   router.lock_port(lock.target_export);
-  router.filter_port(filter.target_export);
 
   // Replicate arguments
   char **argvs[NUM_PROC];
@@ -91,6 +99,9 @@ int sc_main(int ac, char *av[])
   }
   for (int i = 0; i < NUM_PROC; i++) {
     processors[i]->~mips1();
+  }
+  for (int i = 0; i < NUM_FILTERS; i++) {
+    filters[i]->~ac_tlm_filter();
   }
 
   return processors[0]->ac_exit_status;
